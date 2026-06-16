@@ -22,10 +22,8 @@ class BaseAgent(ABC):
                 f"Agent {self.name}: 预算超限，当前花费 {tracker.tracker.usage.total_cost}"
             )
 
-    def update_cost(self, state: VideoState, **kwargs) -> CostTrackerService:
-        tracker = CostTrackerService(state["cost_tracker"])
-        tracker.record(self.name, **kwargs)
-        return tracker.get_tracker()
+    def get_cost_tracker(self, state: VideoState) -> CostTrackerService:
+        return CostTrackerService(state["cost_tracker"])
 
 
 class AgentError(Exception):

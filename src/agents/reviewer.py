@@ -111,7 +111,7 @@ class ReviewerAgent(BaseAgent):
                     description=f"镜头{shot.id}时长过长: {shot.duration}秒",
                     suggestion="建议镜头时长不超过30秒",
                 ))
-            for line in shot.subtitle.split("\\n"):
+            for line in shot.subtitle.split("\n"):
                 if len(line) > 15:
                     issues.append(ReviewIssue(
                         severity=Severity.WARNING,

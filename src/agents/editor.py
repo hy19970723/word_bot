@@ -15,7 +15,7 @@ from config.settings import settings
 class EditorAgent(BaseAgent):
     def __init__(self):
         super().__init__("editor")
-        self.kling_service = KlingService()
+        self.kling_service = KlingService() if settings.kling_access_key else None
         self.image_service = ImageGenService()
         self.tts_service = TTSService()
         self.video_composer = VideoComposeService()
@@ -39,32 +39,41 @@ class EditorAgent(BaseAgent):
         for shot in script.shots:
             source = source_map.get(shot.id)
             prompt = source.generate_prompt if source and source.generate_prompt else shot.image_prompt
-            clip_path = str(assets_dir / f"clip_{shot.id:02d}.mp4")
 
-            kling_duration = 5 if shot.duration <= 7 else 10
+            if self.kling_service:
+                clip_path = str(assets_dir / f"clip_{shot.id:02d}.mp4")
+                kling_duration = 5 if shot.duration <= 7 else 10
 
-            try:
-                result = self.kling_service.text_to_video(
-                    prompt=prompt,
-                    output_path=clip_path,
-                    duration=kling_duration,
-                    aspect_ratio="9:16",
-                )
-                generated_clips[shot.id] = result["path"]
-                tracker.record_image_generation(count=1, cost=result["cost"])
-            except KlingError as e:
-                self.logger.warning("kling_failed", shot_id=shot.id, error=str(e))
-                img_path = str(assets_dir / f"shot_{shot.id:02d}.png")
-                self.image_service.generate(prompt=prompt, output_path=img_path)
-                generated_images[shot.id] = img_path
+                try:
+                    result = self.kling_service.text_to_video(
+                        prompt=prompt,
+                        output_path=clip_path,
+                        duration=kling_duration,
+                        aspect_ratio="9:16",
+                    )
+                    generated_clips[shot.id] = result["path"]
+                    tracker.record_image_generation(count=1, cost=result["cost"])
+                    continue
+                except KlingError as e:
+                    self.logger.warning("kling_failed", shot_id=shot.id, error=str(e))
+
+            img_path = str(assets_dir / f"shot_{shot.id:02d}.png")
+            self.image_service.generate(prompt=prompt, output_path=img_path)
+            generated_images[shot.id] = img_path
+            tracker.record_image_generation(count=1, cost=0.0)
 
         generated_audios = {}
+        voice_id = script.global_settings.voice_id
+        voice_rate = self.tts_service.speed_to_rate(script.global_settings.voice_speed)
+
         for shot in script.shots:
-            audio_path = str(assets_dir / f"narration_{shot.id:02d}.wav")
+            audio_path = str(assets_dir / f"narration_{shot.id:02d}.mp3")
             try:
-                result = self.tts_service.synthesize(
+                result = self.tts_service.synthesize_sync(
                     text=shot.narration,
                     output_path=audio_path,
+                    voice=voice_id,
+                    rate=voice_rate,
                     duration=shot.duration,
                 )
                 generated_audios[shot.id] = result["path"]
@@ -101,6 +110,7 @@ class EditorAgent(BaseAgent):
         self.logger.info("editing_complete", video=video_path)
 
         return {
+            "generated_clips": generated_clips,
             "generated_images": generated_images,
             "generated_audios": generated_audios,
             "video_draft_path": video_path,

@@ -75,13 +75,14 @@ class LLMService:
     def _calculate_usage(self, usage) -> dict:
         model = self.config["model"]
         prices = TOKEN_PRICES.get(model, {"prompt": 0, "completion": 0})
-        cost = (usage.prompt_tokens * prices["prompt"]
-                + usage.completion_tokens * prices["completion"])
+        cost_usd = (usage.prompt_tokens * prices["prompt"]
+                    + usage.completion_tokens * prices["completion"])
+        cost_cny = round(cost_usd * 7.2, 4)
         return {
             "prompt_tokens": usage.prompt_tokens,
             "completion_tokens": usage.completion_tokens,
             "model": model,
-            "cost": round(cost, 4),
+            "cost": cost_cny,
         }
 
 

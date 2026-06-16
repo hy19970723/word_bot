@@ -17,6 +17,7 @@ class VideoState(TypedDict):
     script: Optional[Script]
     production_plan: Optional[ProductionPlan]
 
+    generated_clips: dict[int, str]
     generated_images: dict[int, str]
     generated_audios: dict[int, str]
     video_draft_path: Optional[str]

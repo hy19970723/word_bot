@@ -1,5 +1,6 @@
 import sys
 import uuid
+import logging
 import structlog
 
 from src.graph import build_graph
@@ -10,11 +11,18 @@ from config.settings import settings
 
 logger = structlog.get_logger()
 
+LOG_LEVEL_MAP = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+}
+
 
 def main():
     structlog.configure(
         wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(structlog, settings.log_level, structlog.INFO)
+            LOG_LEVEL_MAP.get(settings.log_level.upper(), logging.INFO)
         ),
     )
 
@@ -52,6 +60,7 @@ def main():
         "duration": duration,
         "script": None,
         "production_plan": None,
+        "generated_clips": {},
         "generated_images": {},
         "generated_audios": {},
         "video_draft_path": None,
