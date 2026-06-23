@@ -1,36 +1,95 @@
-from unittest.mock import patch
-from src.services.kling import KlingService
+from unittest.mock import patch, MagicMock
+from src.services.kling import KlingService, KlingError
 
 
 class TestKlingService:
-    @patch("src.services.kling.settings")
-    def test_generate_jwt(self, mock_settings):
-        mock_settings.kling_access_key = "test_ak"
-        mock_settings.kling_secret_key = "test_sk"
-        mock_settings.kling_base_url = "https://api.klingai.com"
-        mock_settings.kling_model = "kling-v2-5-turbo"
-
+    def test_init_default(self):
         service = KlingService()
-        token = service._generate_jwt()
-        assert isinstance(token, str)
-        assert len(token) > 0
+        assert service.cli == "kling"
 
-    @patch("src.services.kling.settings")
-    def test_headers_format(self, mock_settings):
-        mock_settings.kling_access_key = "test_ak"
-        mock_settings.kling_secret_key = "test_sk"
-        mock_settings.kling_base_url = "https://api.klingai.com"
-        mock_settings.kling_model = "kling-v2-5-turbo"
+    def test_init_custom_command(self):
+        service = KlingService(cli_command="/usr/local/bin/kling")
+        assert service.cli == "/usr/local/bin/kling"
 
+    @patch("src.services.kling.subprocess.run")
+    def test_check_login_success(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout='{"user": "test"}',
+            stderr="",
+        )
         service = KlingService()
-        headers = service._headers()
-        assert "Authorization" in headers
-        assert headers["Authorization"].startswith("Bearer ")
-        assert headers["Content-Type"] == "application/json"
+        assert service.check_login() is True
+
+    @patch("src.services.kling.subprocess.run")
+    def test_check_login_failure(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="not logged in",
+        )
+        service = KlingService()
+        assert service.check_login() is False
+
+    @patch("src.services.kling.subprocess.run")
+    def test_text_to_video_cli_error(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="error: not logged in",
+        )
+        service = KlingService()
+        try:
+            service.text_to_video("test prompt", "/tmp/out.mp4")
+            assert False, "should have raised"
+        except KlingError as e:
+            assert "CLI错误" in str(e)
+
+    @patch("src.services.kling.subprocess.run")
+    def test_text_to_video_cli_not_found(self, mock_run):
+        mock_run.side_effect = FileNotFoundError()
+        service = KlingService()
+        try:
+            service.text_to_video("test prompt", "/tmp/out.mp4")
+            assert False, "should have raised"
+        except KlingError as e:
+            assert "未安装" in str(e)
 
 
-class TestKlingPricing:
-    def test_price_lookup(self):
-        from src.services.kling import KLING_PRICES
-        assert KLING_PRICES["kling-v2-5-turbo"]["5s"] == 0.35
-        assert KLING_PRICES["kling-v2-6-pro"]["10s"] == 0.98
+class TestKlingUrlExtraction:
+    def test_extract_url_direct(self):
+        data = {"url": "https://example.com/video.mp4"}
+        assert KlingService._extract_url(data, "video") == "https://example.com/video.mp4"
+
+    def test_extract_url_nested_videos(self):
+        data = {"task_result": {"videos": [{"url": "https://example.com/v.mp4"}]}}
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
+    def test_extract_url_nested_images(self):
+        data = {"task_result": {"images": [{"url": "https://example.com/i.png"}]}}
+        assert KlingService._extract_url(data, "image") == "https://example.com/i.png"
+
+    def test_extract_url_data_key(self):
+        data = {"data": {"url": "https://example.com/v.mp4"}}
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
+    def test_extract_url_video_url_key(self):
+        data = {"video_url": "https://example.com/v.mp4"}
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
+    def test_extract_url_none(self):
+        assert KlingService._extract_url({}, "video") is None
+
+    def test_extract_url_list(self):
+        data = [{"url": "https://example.com/v.mp4"}]
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
+
+class TestKlingCostEstimate:
+    def test_5s_cost(self):
+        cost = KlingService._estimate_video_cost(5)
+        assert cost == round(0.35 * 7.2, 4)
+
+    def test_10s_cost(self):
+        cost = KlingService._estimate_video_cost(10)
+        assert cost == round(0.49 * 7.2, 4)

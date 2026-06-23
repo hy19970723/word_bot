@@ -8,10 +8,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = Field(default="", description="DeepSeek API Key")
     deepseek_base_url: str = Field(default="https://api.deepseek.com")
 
-    kling_access_key: str = Field(default="", description="可灵 Access Key")
-    kling_secret_key: str = Field(default="", description="可灵 Secret Key")
-    kling_base_url: str = Field(default="https://api.klingai.com")
-    kling_model: str = Field(default="kling-v2-5-turbo", description="可灵模型")
+    kling_cli_command: str = Field(default="kling", description="可灵CLI命令路径")
 
     max_tokens_per_video: int = Field(default=8000)
     max_images_per_video: int = Field(default=8)
