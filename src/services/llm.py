@@ -8,6 +8,11 @@ from config.settings import settings
 logger = structlog.get_logger()
 
 MODEL_ROUTING = {
+    "reasoning": {
+        "model": "deepseek-reasoner",
+        "temperature": None,
+        "max_tokens": 4096,
+    },
     "creative": {
         "model": "deepseek-chat",
         "temperature": 0.8,
@@ -23,6 +28,13 @@ MODEL_ROUTING = {
 TOKEN_PRICES = {
     "deepseek-chat": {"prompt": 1.0 / 1_000_000, "completion": 2.0 / 1_000_000},
     "deepseek-reasoner": {"prompt": 4.0 / 1_000_000, "completion": 16.0 / 1_000_000},
+}
+
+CONTENT_TYPE_TIER = {
+    "science": "reasoning",
+    "story": "reasoning",
+    "trending": "creative",
+    "product": "creative",
 }
 
 
@@ -51,13 +63,16 @@ class LLMService:
                 if attempt > 0:
                     current_prompt += f"\n\n[第{attempt+1}次尝试] 上次输出格式有误：{last_error}，请修正后重新输出。"
 
-                response = self.client.chat.completions.create(
-                    model=self.config["model"],
-                    messages=[{"role": "user", "content": current_prompt}],
-                    temperature=self.config["temperature"],
-                    max_tokens=self.config["max_tokens"],
-                    response_format={"type": "json_object"},
-                )
+                params = {
+                    "model": self.config["model"],
+                    "messages": [{"role": "user", "content": current_prompt}],
+                    "max_tokens": self.config["max_tokens"],
+                    "response_format": {"type": "json_object"},
+                }
+                if self.config["temperature"] is not None:
+                    params["temperature"] = self.config["temperature"]
+
+                response = self.client.chat.completions.create(**params)
 
                 content = response.choices[0].message.content
                 parsed = response_model.model_validate_json(content)
@@ -75,14 +90,13 @@ class LLMService:
     def _calculate_usage(self, usage) -> dict:
         model = self.config["model"]
         prices = TOKEN_PRICES.get(model, {"prompt": 0, "completion": 0})
-        cost_usd = (usage.prompt_tokens * prices["prompt"]
-                    + usage.completion_tokens * prices["completion"])
-        cost_cny = round(cost_usd * 7.2, 4)
+        cost = (usage.prompt_tokens * prices["prompt"]
+                + usage.completion_tokens * prices["completion"])
         return {
             "prompt_tokens": usage.prompt_tokens,
             "completion_tokens": usage.completion_tokens,
             "model": model,
-            "cost": cost_cny,
+            "cost": round(cost, 4),
         }
 
 

@@ -1,5 +1,5 @@
 from unittest.mock import patch
-from src.agents.screenwriter import ScreenwriterAgent, _calculate_shot_count
+from src.agents.screenwriter import ScreenwriterAgent, _calculate_shot_count, _select_tier
 from src.schemas.script import Script
 
 
@@ -25,6 +25,23 @@ class TestShotCountCalculation:
     def test_unknown_type_fallback(self):
         result = _calculate_shot_count("unknown", 60)
         assert result >= 4
+
+
+class TestModelTierSelection:
+    def test_science_uses_reasoning(self):
+        assert _select_tier("science") == "reasoning"
+
+    def test_story_uses_reasoning(self):
+        assert _select_tier("story") == "reasoning"
+
+    def test_trending_uses_creative(self):
+        assert _select_tier("trending") == "creative"
+
+    def test_product_uses_creative(self):
+        assert _select_tier("product") == "creative"
+
+    def test_unknown_fallback_to_creative(self):
+        assert _select_tier("unknown") == "creative"
 
 
 class TestScreenwriterAgent:

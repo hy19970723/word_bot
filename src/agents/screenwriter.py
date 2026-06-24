@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from src.agents.base import BaseAgent, AgentError
-from src.services.llm import LLMService, LLMOutputError
+from src.services.llm import LLMService, LLMOutputError, CONTENT_TYPE_TIER
 from src.services.cost_tracker import CostTrackerService
 from src.schemas.script import Script
 from src.state import VideoState
@@ -33,10 +33,13 @@ def _load_template(content_type: str) -> str:
     return template_file.read_text(encoding="utf-8")
 
 
+def _select_tier(content_type: str) -> str:
+    return CONTENT_TYPE_TIER.get(content_type, "creative")
+
+
 class ScreenwriterAgent(BaseAgent):
     def __init__(self):
         super().__init__("screenwriter")
-        self.llm = LLMService(model_tier="creative")
 
     def execute(self, state: VideoState) -> dict:
         self.check_budget(state)
@@ -46,6 +49,9 @@ class ScreenwriterAgent(BaseAgent):
         tone = state["tone"]
         duration = state["duration"]
         shot_count = _calculate_shot_count(content_type, duration)
+
+        tier = _select_tier(content_type)
+        llm = LLMService(model_tier=tier)
 
         template = _load_template(content_type)
         json_schema = json.dumps(Script.model_json_schema(), ensure_ascii=False)
@@ -64,14 +70,14 @@ class ScreenwriterAgent(BaseAgent):
             prompt += f"\n\n用户修改意见：{feedback}\n请根据以上意见调整你的创作。"
 
         try:
-            script, usage = self.llm.generate_structured(prompt, Script)
+            script, usage = llm.generate_structured(prompt, Script)
         except LLMOutputError as e:
             raise AgentError(self.name, str(e), recoverable=False)
 
         tracker = CostTrackerService(state["cost_tracker"])
         tracker.record_token_usage(self.name, usage)
 
-        self.logger.info("script_generated", title=script.title, shots=len(script.shots))
+        self.logger.info("script_generated", title=script.title, shots=len(script.shots), model=tier)
 
         return {
             "script": script,
