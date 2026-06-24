@@ -66,4 +66,4 @@ class TestCostTracker:
         })
         report = service.print_report()
         assert "screenwriter" in report
-        assert "¥0.5000" in report
+        assert "0.5000 CNY" in report

@@ -45,18 +45,18 @@ class CostTrackerService:
         u = self.tracker.usage
         lines = [
             "=" * 40,
-            "成本报告",
+            "Cost Report",
             "=" * 40,
-            "Token消耗:",
+            "Token:",
         ]
         for agent, t in u.tokens.items():
-            lines.append(f"  {agent}: {t.prompt_tokens}+{t.completion_tokens} tokens ({t.model}) = ¥{t.cost:.4f}")
+            lines.append(f"  {agent}: {t.prompt_tokens}+{t.completion_tokens} tokens ({t.model}) = {t.cost:.4f} CNY")
         lines.extend([
-            f"图片生成: {u.images.ai_generated}张 = ¥{u.images.cost:.4f}",
-            f"TTS: ¥{u.tts_cost:.4f}",
-            f"{'─' * 40}",
-            f"总计: ¥{u.total_cost:.4f} / 预算 ¥{self.tracker.budget.cost_limit:.2f}",
-            f"状态: {self.tracker.status.value}",
+            f"Images: {u.images.ai_generated} = {u.images.cost:.4f} CNY",
+            f"TTS: {u.tts_cost:.4f} CNY",
+            f"{'-' * 40}",
+            f"Total: {u.total_cost:.4f} / Budget {self.tracker.budget.cost_limit:.2f} CNY",
+            f"Status: {self.tracker.status.value}",
             "=" * 40,
         ])
         return "\n".join(lines)

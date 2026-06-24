@@ -66,7 +66,7 @@ class VideoComposeService:
                         color=global_settings.get("subtitle_color", "white"),
                         stroke_color=global_settings.get("subtitle_outline_color", "black"),
                         stroke_width=global_settings.get("subtitle_outline_width", 2),
-                        font="Arial",
+                        font="C:/Windows/Fonts/msyh.ttc",
                         size=(VIDEO_WIDTH - 100, None),
                         method="caption",
                         text_align="center",
