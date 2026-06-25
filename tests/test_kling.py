@@ -84,6 +84,18 @@ class TestKlingUrlExtraction:
         data = [{"url": "https://example.com/v.mp4"}]
         assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
 
+    def test_extract_url_generations(self):
+        data = {"generations": [{"url": "https://example.com/v.mp4", "status": "COMPLETE"}]}
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
+    def test_extract_url_body_generations(self):
+        data = {"body": {"generations": [{"url": "https://example.com/v.mp4"}]}}
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
+    def test_extract_url_generations_video_url(self):
+        data = {"generations": [{"video_url": "https://example.com/v.mp4"}]}
+        assert KlingService._extract_url(data, "video") == "https://example.com/v.mp4"
+
 
 class TestKlingCostEstimate:
     def test_5s_cost(self):

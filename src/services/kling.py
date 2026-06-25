@@ -154,10 +154,25 @@ class KlingService:
                 images = data["images"]
                 if images and isinstance(images, list):
                     return images[0].get("url")
+            if "generations" in data:
+                generations = data["generations"]
+                if generations and isinstance(generations, list):
+                    gen = generations[0]
+                    if isinstance(gen, dict):
+                        if "url" in gen:
+                            return gen["url"]
+                        if "video_url" in gen:
+                            return gen["video_url"]
+                        if "image_url" in gen:
+                            return gen["image_url"]
+                        if "result" in gen:
+                            return KlingService._extract_url(gen["result"], media_type)
             if "result" in data:
                 return KlingService._extract_url(data["result"], media_type)
             if "data" in data:
                 return KlingService._extract_url(data["data"], media_type)
+            if "body" in data:
+                return KlingService._extract_url(data["body"], media_type)
             if "task_result" in data:
                 return KlingService._extract_url(data["task_result"], media_type)
             for key in ("video_url", "image_url", "download_url", "file_url"):

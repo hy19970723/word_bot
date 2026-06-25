@@ -26,15 +26,15 @@ def main():
 
     video_id = str(uuid.uuid4())[:8]
     print(f"视频ID: {video_id}")
-    print("主题: 黑洞是什么")
-    print("类型: 知识科普")
+    print("主题: 赘婿逆袭")
+    print("类型: 故事/爽文")
     print("时长: 30秒")
 
     initial_state = {
         "video_id": video_id,
-        "user_input": "黑洞是什么",
-        "content_type": "science",
-        "tone": "幽默通俗",
+        "user_input": "赘婿逆袭：被全家人嘲笑的上门女婿，其实是隐藏的首富之子。当真相揭开的那一刻，所有人都跪了",
+        "content_type": "story",
+        "tone": "热血爽文",
         "duration": 30,
         "script": None,
         "production_plan": None,
