@@ -62,10 +62,12 @@ class KlingService:
         output_path: str,
         aspect_ratio: str = "9:16",
         model: str = "",
+        resolution: str = "1k",
     ) -> dict:
         cmd = [
             self.cli, "text_to_image", prompt,
             "--aspectRatio", aspect_ratio,
+            "--imgResolution", resolution,
             "--poll", str(DEFAULT_POLL_TIMEOUT),
             "--quiet",
         ]
@@ -83,7 +85,7 @@ class KlingService:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         self._download(image_url, output_path)
 
-        logger.info("kling_image_generated", path=output_path)
+        logger.info("kling_image_generated", path=output_path, resolution=resolution)
         return {"path": output_path, "cost": 0.0, "model": model or "kolors"}
 
     def image_to_video(

@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     kling_duration: int = Field(default=5, description="可灵视频时长(秒): 5(省) / 10")
     kling_video_mode: str = Field(default="all_video", description="生成模式: all_video(全视频) / mixed(关键视频+其他图片) / all_image(全图片最省)")
     kling_image_model: str = Field(default="kling-image-v2_1", description="可灵图片模型: kling-image-v2_1(最便宜) / kling-image-v3_0")
+    kling_image_resolution: str = Field(default="1k", description="可灵图片分辨率: 1k(省) / 2k / 4k(高清)")
+
+    llm_screenwriter_tier: str = Field(default="auto", description="编剧模型: auto(按类型自动选) / chat(快省) / reasoner(深度思考)")
+    llm_reviewer_enabled: bool = Field(default=True, description="是否启用审核Agent: true / false(关闭省一轮LLM)")
+    llm_reviewer_tier: str = Field(default="efficient", description="审核模型: efficient(chat快省) / reasoning(reasoner深度)")
+
+    preview_mode: bool = Field(default=False, description="预览模式: true(只生成第1个镜头) / false(全部生成)")
 
     max_tokens_per_video: int = Field(default=8000)
     max_images_per_video: int = Field(default=8)

@@ -41,9 +41,15 @@ class EditorAgent(BaseAgent):
         resolution = settings.kling_resolution
         video_model = settings.kling_model
         image_model = settings.kling_image_model
+        image_resolution = settings.kling_image_resolution
+        preview = settings.preview_mode
+
+        shots_to_process = script.shots[:1] if preview else script.shots
+        if preview and len(script.shots) > 1:
+            self.logger.info("preview_mode", generating_only="shot 1", total_shots=len(script.shots))
 
         source_map = {s.shot_id: s for s in plan.shot_sources}
-        for shot in script.shots:
+        for shot in shots_to_process:
             source = source_map.get(shot.id)
             prompt = source.generate_prompt if source and source.generate_prompt else shot.image_prompt
 
@@ -74,6 +80,7 @@ class EditorAgent(BaseAgent):
                         output_path=img_path,
                         aspect_ratio="9:16",
                         model=image_model,
+                        resolution=image_resolution,
                     )
                     generated_images[shot.id] = result["path"]
                     tracker.record_image_generation(count=1, cost=result["cost"])
@@ -86,7 +93,7 @@ class EditorAgent(BaseAgent):
             tracker.record_image_generation(count=1, cost=0.0)
 
         generated_audios = {}
-        for shot in script.shots:
+        for shot in shots_to_process:
             audio_path = str(assets_dir / f"narration_{shot.id:02d}.wav")
             try:
                 result = self.tts_service.synthesize_sync(
@@ -99,7 +106,7 @@ class EditorAgent(BaseAgent):
                 self.logger.warning("tts_failed", shot_id=shot.id, error=str(e))
                 raise AgentError(self.name, f"音频生成失败 shot {shot.id}: {e}")
 
-        shots_data = [shot.model_dump() for shot in script.shots]
+        shots_data = [shot.model_dump() for shot in shots_to_process]
 
         global_settings = script.global_settings.model_dump()
         global_settings["bgm_volume"] = plan.audio_plan.bgm_volume

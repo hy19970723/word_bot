@@ -5,6 +5,7 @@ from src.agents.screenwriter import ScreenwriterAgent
 from src.agents.director import DirectorAgent
 from src.agents.editor import EditorAgent
 from src.agents.reviewer import ReviewerAgent
+from config.settings import settings
 
 
 def build_graph():
@@ -21,6 +22,7 @@ def build_graph():
     graph.add_node("human_plan_review", human_plan_review_node)
     graph.add_node("editing", editor.execute)
     graph.add_node("reviewing", reviewer.execute)
+    graph.add_node("skip_review", skip_review_node)
     graph.add_node("human_video_review", human_video_review_node)
 
     graph.add_edge(START, "screenwriting")
@@ -44,7 +46,14 @@ def build_graph():
             "cancelled": END,
         }
     )
-    graph.add_edge("editing", "reviewing")
+    graph.add_conditional_edges(
+        "editing",
+        route_editing_to_review,
+        {
+            "review": "reviewing",
+            "skip": "skip_review",
+        }
+    )
     graph.add_conditional_edges(
         "reviewing",
         route_after_review,
@@ -54,6 +63,7 @@ def build_graph():
             "max_rounds_reached": "human_video_review",
         }
     )
+    graph.add_edge("skip_review", "human_video_review")
     graph.add_conditional_edges(
         "human_video_review",
         route_after_video_review,
@@ -65,6 +75,19 @@ def build_graph():
     )
 
     return graph.compile()
+
+
+def route_editing_to_review(state: VideoState) -> str:
+    if settings.llm_reviewer_enabled:
+        return "review"
+    return "skip"
+
+
+def skip_review_node(state: VideoState) -> dict:
+    return {
+        "final_video_path": state.get("video_draft_path"),
+        "status": "awaiting_video_review",
+    }
 
 
 def route_after_script_review(state: VideoState) -> str:

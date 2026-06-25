@@ -12,6 +12,7 @@ from src.schemas.review import (
 )
 from src.state import VideoState
 from src.utils.sensitive_words import check_sensitive_words
+from config.settings import settings
 
 
 REVIEWER_TEMPLATE = Path(__file__).parent.parent.parent / "config" / "templates" / "reviewer" / "default.txt"
@@ -21,7 +22,7 @@ PASS_SCORE = 60
 class ReviewerAgent(BaseAgent):
     def __init__(self):
         super().__init__("reviewer")
-        self.llm = LLMService(model_tier="efficient")
+        self.llm = LLMService(model_tier=settings.llm_reviewer_tier)
 
     def execute(self, state: VideoState) -> dict:
         self.check_budget(state)

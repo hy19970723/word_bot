@@ -64,7 +64,7 @@ def main():
     from src.agents.director import DirectorAgent
     from src.agents.editor import EditorAgent
     from src.agents.reviewer import ReviewerAgent
-    from src.graph import route_after_script_review, route_after_plan_review, route_after_review, route_after_video_review
+    from src.graph import route_after_script_review, route_after_plan_review, route_after_review, route_after_video_review, route_editing_to_review, skip_review_node
 
     graph = StateGraph(VideoState)
     screenwriter = ScreenwriterAgent()
@@ -78,6 +78,7 @@ def main():
     graph.add_node("human_plan_review", auto_approve_plan)
     graph.add_node("editing", editor.execute)
     graph.add_node("reviewing", reviewer.execute)
+    graph.add_node("skip_review", skip_review_node)
     graph.add_node("human_video_review", auto_approve_video)
 
     graph.add_edge(START, "screenwriting")
@@ -87,9 +88,11 @@ def main():
     graph.add_edge("directing", "human_plan_review")
     graph.add_conditional_edges("human_plan_review", route_after_plan_review,
         {"approved": "editing", "revision": "screenwriting", "cancelled": END})
-    graph.add_edge("editing", "reviewing")
+    graph.add_conditional_edges("editing", route_editing_to_review,
+        {"review": "reviewing", "skip": "skip_review"})
     graph.add_conditional_edges("reviewing", route_after_review,
         {"approved": "human_video_review", "revision_needed": "editing", "max_rounds_reached": "human_video_review"})
+    graph.add_edge("skip_review", "human_video_review")
     graph.add_conditional_edges("human_video_review", route_after_video_review,
         {"approved": END, "revision": "editing", "cancelled": END})
 

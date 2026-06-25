@@ -37,6 +37,9 @@ def _load_template(content_type: str) -> str:
 
 
 def _select_tier(content_type: str) -> str:
+    override = settings.llm_screenwriter_tier
+    if override != "auto":
+        return override
     return CONTENT_TYPE_TIER.get(content_type, "creative")
 
 
