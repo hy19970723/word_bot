@@ -14,6 +14,11 @@ def auto_approve_script(state):
     print("\n[自动审核] 脚本已自动批准")
     return {"human_action": "approve", "status": "directing"}
 
+def auto_approve_plan(state):
+    """自动批准制作方案"""
+    print("\n[自动审核] 制作方案已自动批准")
+    return {"human_action": "approve", "status": "editing"}
+
 def auto_approve_video(state):
     """自动批准成片"""
     print("\n[自动审核] 成片已自动批准")
@@ -28,14 +33,14 @@ def main():
     print(f"视频ID: {video_id}")
     print("主题: 赘婿逆袭")
     print("类型: 故事/爽文")
-    print("时长: 30秒")
+    print("时长: 10秒")
 
     initial_state = {
         "video_id": video_id,
         "user_input": "赘婿逆袭：被全家人嘲笑的上门女婿，其实是隐藏的首富之子。当真相揭开的那一刻，所有人都跪了",
         "content_type": "story",
         "tone": "热血爽文",
-        "duration": 30,
+        "duration": 10,
         "script": None,
         "production_plan": None,
         "generated_clips": {},
@@ -59,7 +64,7 @@ def main():
     from src.agents.director import DirectorAgent
     from src.agents.editor import EditorAgent
     from src.agents.reviewer import ReviewerAgent
-    from src.graph import route_after_script_review, route_after_review, route_after_video_review
+    from src.graph import route_after_script_review, route_after_plan_review, route_after_review, route_after_video_review
 
     graph = StateGraph(VideoState)
     screenwriter = ScreenwriterAgent()
@@ -70,6 +75,7 @@ def main():
     graph.add_node("screenwriting", screenwriter.execute)
     graph.add_node("human_script_review", auto_approve_script)
     graph.add_node("directing", director.execute)
+    graph.add_node("human_plan_review", auto_approve_plan)
     graph.add_node("editing", editor.execute)
     graph.add_node("reviewing", reviewer.execute)
     graph.add_node("human_video_review", auto_approve_video)
@@ -78,7 +84,9 @@ def main():
     graph.add_edge("screenwriting", "human_script_review")
     graph.add_conditional_edges("human_script_review", route_after_script_review,
         {"approved": "directing", "revision": "screenwriting", "cancelled": END})
-    graph.add_edge("directing", "editing")
+    graph.add_edge("directing", "human_plan_review")
+    graph.add_conditional_edges("human_plan_review", route_after_plan_review,
+        {"approved": "editing", "revision": "screenwriting", "cancelled": END})
     graph.add_edge("editing", "reviewing")
     graph.add_conditional_edges("reviewing", route_after_review,
         {"approved": "human_video_review", "revision_needed": "editing", "max_rounds_reached": "human_video_review"})

@@ -6,7 +6,7 @@ from src.services.image_gen import ImageGenService
 from src.services.tts import TTSService, TTSError
 from src.services.video_compose import VideoComposeService, ComposeError
 from src.services.cost_tracker import CostTrackerService
-from src.schemas.script import Script
+from src.schemas.script import Script, ShotType
 from src.schemas.plan import ProductionPlan
 from src.state import VideoState
 from config.settings import settings
@@ -36,22 +36,29 @@ class EditorAgent(BaseAgent):
         tracker = CostTrackerService(state["cost_tracker"])
 
         kling_available = self._check_kling()
+        mode = settings.kling_video_mode
+        kling_duration = settings.kling_duration
+        resolution = settings.kling_resolution
+        video_model = settings.kling_model
+        image_model = settings.kling_image_model
 
         source_map = {s.shot_id: s for s in plan.shot_sources}
         for shot in script.shots:
             source = source_map.get(shot.id)
             prompt = source.generate_prompt if source and source.generate_prompt else shot.image_prompt
 
-            if kling_available:
-                clip_path = str(assets_dir / f"clip_{shot.id:02d}.mp4")
-                kling_duration = 5 if shot.duration <= 7 else 10
+            use_video = self._should_use_video(shot, mode, kling_available)
 
+            if use_video:
+                clip_path = str(assets_dir / f"clip_{shot.id:02d}.mp4")
                 try:
                     result = self.kling_service.text_to_video(
                         prompt=prompt,
                         output_path=clip_path,
                         duration=kling_duration,
                         aspect_ratio="9:16",
+                        resolution=resolution,
+                        model=video_model,
                     )
                     generated_clips[shot.id] = result["path"]
                     tracker.record_image_generation(count=1, cost=result["cost"])
@@ -66,6 +73,7 @@ class EditorAgent(BaseAgent):
                         prompt=prompt,
                         output_path=img_path,
                         aspect_ratio="9:16",
+                        model=image_model,
                     )
                     generated_images[shot.id] = result["path"]
                     tracker.record_image_generation(count=1, cost=result["cost"])
@@ -127,6 +135,18 @@ class EditorAgent(BaseAgent):
             "cost_tracker": tracker.get_tracker(),
             "status": "reviewing",
         }
+
+    @staticmethod
+    def _should_use_video(shot, mode: str, kling_available: bool) -> bool:
+        if not kling_available:
+            return False
+        if mode == "all_video":
+            return True
+        if mode == "all_image":
+            return False
+        if mode == "mixed":
+            return shot.type in (ShotType.OPENING, ShotType.CLOSING) or shot.priority.value == "high"
+        return True
 
     def _check_kling(self) -> bool:
         try:

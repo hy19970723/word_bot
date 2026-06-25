@@ -4,27 +4,47 @@ from src.schemas.script import Script
 
 
 class TestShotCountCalculation:
-    def test_science_short(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_science_short(self, mock_settings):
+        mock_settings.max_shots = 30
         assert 4 <= _calculate_shot_count("science", 30) <= 6
 
-    def test_science_medium(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_science_medium(self, mock_settings):
+        mock_settings.max_shots = 30
         assert 6 <= _calculate_shot_count("science", 90) <= 10
 
-    def test_science_long(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_science_long(self, mock_settings):
+        mock_settings.max_shots = 30
         assert 10 <= _calculate_shot_count("science", 150) <= 12
 
-    def test_story_medium(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_story_medium(self, mock_settings):
+        mock_settings.max_shots = 30
         assert 6 <= _calculate_shot_count("story", 90) <= 10
 
-    def test_trending_short(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_trending_short(self, mock_settings):
+        mock_settings.max_shots = 30
         assert 3 <= _calculate_shot_count("trending", 45) <= 5
 
-    def test_product(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_product(self, mock_settings):
+        mock_settings.max_shots = 30
         assert 4 <= _calculate_shot_count("product", 45) <= 8
 
-    def test_unknown_type_fallback(self):
+    @patch("src.agents.screenwriter.settings")
+    def test_unknown_type_fallback(self, mock_settings):
+        mock_settings.max_shots = 30
         result = _calculate_shot_count("unknown", 60)
-        assert result >= 4
+        assert result >= 2
+
+    @patch("src.agents.screenwriter.settings")
+    def test_max_shots_cap(self, mock_settings):
+        mock_settings.max_shots = 3
+        result = _calculate_shot_count("science", 150)
+        assert result <= 3
 
 
 class TestModelTierSelection:

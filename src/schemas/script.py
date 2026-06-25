@@ -96,7 +96,7 @@ class Script(BaseModel):
     title: str = Field(min_length=1, max_length=50, description="视频标题")
     style: str = Field(description="内容类型: science/story/trending/product")
     tone: str = Field(default="幽默通俗", description="语气风格")
-    total_duration: int = Field(ge=15, le=600, description="总时长（秒）")
+    total_duration: int = Field(ge=5, le=600, description="总时长（秒）")
     aspect_ratio: str = Field(default="9:16", description="画面比例")
     resolution: str = Field(default="1080x1920", description="分辨率")
     fps: int = Field(default=30, description="帧率")

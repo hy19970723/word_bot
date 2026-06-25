@@ -126,10 +126,18 @@ class TestKlingUrlExtraction:
 
 
 class TestKlingCostEstimate:
-    def test_5s_cost(self):
-        cost = KlingService._estimate_video_cost(5)
-        assert cost == round(0.35 * 7.2, 4)
+    def test_5s_cost_720p(self):
+        cost = KlingService._estimate_video_cost(5, "720p")
+        assert cost == round(0.245 * 7.2, 4)
 
-    def test_10s_cost(self):
-        cost = KlingService._estimate_video_cost(10)
+    def test_10s_cost_720p(self):
+        cost = KlingService._estimate_video_cost(10, "720p")
         assert cost == round(0.49 * 7.2, 4)
+
+    def test_5s_cost_1080p(self):
+        cost = KlingService._estimate_video_cost(5, "1080p")
+        assert cost == round(0.49 * 7.2, 4)
+
+    def test_10s_cost_1080p(self):
+        cost = KlingService._estimate_video_cost(10, "1080p")
+        assert cost == round(0.98 * 7.2, 4)

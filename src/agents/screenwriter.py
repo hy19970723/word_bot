@@ -6,6 +6,7 @@ from src.services.llm import LLMService, LLMOutputError, CONTENT_TYPE_TIER
 from src.services.cost_tracker import CostTrackerService
 from src.schemas.script import Script
 from src.state import VideoState
+from config.settings import settings
 
 
 SHOT_COUNT_TABLE = {
@@ -19,11 +20,13 @@ TEMPLATE_DIR = Path(__file__).parent.parent.parent / "config" / "templates" / "s
 
 
 def _calculate_shot_count(content_type: str, duration: int) -> int:
+    max_shots = settings.max_shots
     rules = SHOT_COUNT_TABLE.get(content_type, SHOT_COUNT_TABLE["science"])
-    for min_dur, max_dur, min_shots, max_shots in rules:
+    for min_dur, max_dur, min_shots, table_max_shots in rules:
         if min_dur <= duration <= max_dur:
-            return max(min_shots, min(max_shots, duration // 10))
-    return max(4, min(12, duration // 10))
+            calculated = max(min_shots, min(table_max_shots, duration // 10))
+            return min(calculated, max_shots)
+    return min(max(2, min(6, duration // 10)), max_shots)
 
 
 def _load_template(content_type: str) -> str:

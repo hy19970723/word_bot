@@ -28,11 +28,13 @@ class KlingService:
         duration: int = 5,
         aspect_ratio: str = "9:16",
         model: str = "",
+        resolution: str = "720p",
     ) -> dict:
         cmd = [
             self.cli, "text_to_video", prompt,
             "--duration", str(duration),
             "--aspectRatio", aspect_ratio,
+            "--resolution", resolution,
             "--poll", str(DEFAULT_POLL_TIMEOUT),
             "--quiet",
         ]
@@ -50,8 +52,8 @@ class KlingService:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         self._download(video_url, output_path)
 
-        cost = self._estimate_video_cost(duration)
-        logger.info("kling_video_generated", path=output_path, cost=cost, duration=duration)
+        cost = self._estimate_video_cost(duration, resolution)
+        logger.info("kling_video_generated", path=output_path, cost=cost, duration=duration, resolution=resolution)
         return {"path": output_path, "cost": cost, "model": model or "default"}
 
     def text_to_image(
@@ -90,10 +92,12 @@ class KlingService:
         prompt: str,
         output_path: str,
         model: str = "",
+        resolution: str = "720p",
     ) -> dict:
         cmd = [
             self.cli, "image_to_video", prompt,
             "--image", image_path,
+            "--resolution", resolution,
             "--poll", str(DEFAULT_POLL_TIMEOUT),
             "--quiet",
         ]
@@ -111,7 +115,7 @@ class KlingService:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         self._download(video_url, output_path)
 
-        cost = self._estimate_video_cost(5)
+        cost = self._estimate_video_cost(5, resolution)
         logger.info("kling_image_to_video_generated", path=output_path, cost=cost)
         return {"path": output_path, "cost": cost, "model": model or "default"}
 
@@ -200,10 +204,15 @@ class KlingService:
                     f.write(chunk)
 
     @staticmethod
-    def _estimate_video_cost(duration: int) -> float:
-        if duration <= 5:
-            return round(0.35 * 7.2, 4)
-        return round(0.49 * 7.2, 4)
+    def _estimate_video_cost(duration: int, resolution: str = "720p") -> float:
+        if resolution == "1080p":
+            if duration <= 5:
+                return round(0.49 * 7.2, 4)
+            return round(0.98 * 7.2, 4)
+        else:
+            if duration <= 5:
+                return round(0.245 * 7.2, 4)
+            return round(0.49 * 7.2, 4)
 
 
 class KlingError(Exception):
