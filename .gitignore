@@ -10,3 +10,5 @@ build/
 venv/
 .pytest_cache/
 .ruff_cache/
+*TEMP_MPY_wvf_snd.mp4
+*TEMP_MPY_wvf_cut.mp4
