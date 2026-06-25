@@ -71,6 +71,33 @@ class ScreenwriterAgent(BaseAgent):
             json_schema=json_schema,
         )
 
+        # 注入项目上下文
+        project = state.get("project")
+        if project:
+            context_parts = []
+            
+            # 注入角色设定
+            character_descriptions = state.get("character_descriptions", "")
+            if character_descriptions:
+                context_parts.append(f"\n\n【角色设定】\n{character_descriptions}")
+            
+            # 注入前情提要
+            previous_summary = state.get("previous_episodes_summary", "")
+            if previous_summary and previous_summary != "这是第一集，没有前情提要。":
+                context_parts.append(f"\n\n【前情提要】\n{previous_summary}")
+            
+            # 注入整体故事大纲
+            if project.overall_story:
+                context_parts.append(f"\n\n【整体故事大纲】\n{project.overall_story}")
+            
+            # 注入当前集数
+            episode_number = state.get("episode_number", 1)
+            if episode_number > 1:
+                context_parts.append(f"\n\n【当前是第{episode_number}集，请延续前面的剧情】")
+            
+            if context_parts:
+                prompt += "".join(context_parts)
+
         feedback = state.get("human_feedback")
         if feedback:
             prompt += f"\n\n用户修改意见：{feedback}\n请根据以上意见调整你的创作。"

@@ -26,6 +26,7 @@ class EditorAgent(BaseAgent):
         script: Script = state["script"]
         plan: ProductionPlan = state["production_plan"]
         video_id = state["video_id"]
+        project = state.get("project")
 
         output_dir = Path(settings.output_dir) / video_id
         assets_dir = output_dir / "assets"
@@ -57,6 +58,24 @@ class EditorAgent(BaseAgent):
 
             if use_video:
                 clip_path = str(assets_dir / f"clip_{shot.id:02d}.mp4")
+
+                ref_image = self._find_character_reference(shot, project)
+                if ref_image and kling_available:
+                    try:
+                        result = self.kling_service.image_to_video(
+                            image_path=ref_image,
+                            prompt=prompt,
+                            output_path=clip_path,
+                            model=video_model,
+                            resolution=resolution,
+                        )
+                        generated_clips[shot.id] = result["path"]
+                        tracker.record_image_generation(count=1, cost=result["cost"])
+                        self.logger.info("image_to_video_success", shot_id=shot.id, ref=ref_image)
+                        continue
+                    except KlingError as e:
+                        self.logger.warning("image_to_video_failed", shot_id=shot.id, error=str(e))
+
                 try:
                     result = self.kling_service.text_to_video(
                         prompt=prompt,
@@ -154,6 +173,17 @@ class EditorAgent(BaseAgent):
         if mode == "mixed":
             return shot.type in (ShotType.OPENING, ShotType.CLOSING) or shot.priority.value == "high"
         return True
+
+    @staticmethod
+    def _find_character_reference(shot, project) -> str | None:
+        if not project or not project.characters:
+            return None
+        prompt_lower = (shot.image_prompt + " " + shot.narration).lower()
+        for character in project.characters:
+            if character.name.lower() in prompt_lower:
+                if character.reference_image_path and Path(character.reference_image_path).exists():
+                    return character.reference_image_path
+        return None
 
     def _check_kling(self) -> bool:
         try:

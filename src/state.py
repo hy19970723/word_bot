@@ -5,6 +5,7 @@ from src.schemas.script import Script
 from src.schemas.plan import ProductionPlan
 from src.schemas.review import ReviewReport
 from src.schemas.cost import CostTracker
+from src.schemas.project import Project
 
 
 class VideoState(TypedDict):
@@ -13,6 +14,12 @@ class VideoState(TypedDict):
     content_type: str
     tone: str
     duration: int
+
+    # 项目上下文
+    project: Optional[Project]
+    episode_number: int
+    previous_episodes_summary: str
+    character_descriptions: str
 
     script: Optional[Script]
     production_plan: Optional[ProductionPlan]

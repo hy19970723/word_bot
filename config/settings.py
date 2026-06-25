@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     cost_limit_per_video: float = Field(default=5.0)
 
     output_dir: str = Field(default="./output")
+    projects_dir: str = Field(default="./projects", description="项目数据目录")
     log_level: str = Field(default="INFO")
 
     default_voice_speed: float = Field(default=1.0)
