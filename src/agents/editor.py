@@ -28,7 +28,7 @@ class EditorAgent(BaseAgent):
         video_id = state["video_id"]
         project = state.get("project")
 
-        output_dir = Path(settings.output_dir) / video_id
+        output_dir = Path(state.get("output_dir", str(Path(settings.output_dir) / video_id)))
         assets_dir = output_dir / "assets"
         assets_dir.mkdir(parents=True, exist_ok=True)
 
@@ -53,6 +53,9 @@ class EditorAgent(BaseAgent):
         for shot in shots_to_process:
             source = source_map.get(shot.id)
             prompt = source.generate_prompt if source and source.generate_prompt else shot.image_prompt
+
+            characters_in_shot = self._find_characters_in_shot(shot, project)
+            prompt = self._enhance_prompt_with_character(prompt, characters_in_shot)
 
             use_video = self._should_use_video(shot, mode, kling_available)
 
@@ -176,6 +179,7 @@ class EditorAgent(BaseAgent):
 
     @staticmethod
     def _find_character_reference(shot, project) -> str | None:
+        """查找镜头中涉及的角色参考图"""
         if not project or not project.characters:
             return None
         prompt_lower = (shot.image_prompt + " " + shot.narration).lower()
@@ -184,6 +188,31 @@ class EditorAgent(BaseAgent):
                 if character.reference_image_path and Path(character.reference_image_path).exists():
                     return character.reference_image_path
         return None
+
+    @staticmethod
+    def _find_characters_in_shot(shot, project) -> list:
+        """查找镜头中涉及的所有角色"""
+        if not project or not project.characters:
+            return []
+        prompt_lower = (shot.image_prompt + " " + shot.narration).lower()
+        matched = []
+        for character in project.characters:
+            if character.name.lower() in prompt_lower:
+                matched.append(character)
+        return matched
+
+    @staticmethod
+    def _enhance_prompt_with_character(prompt: str, characters: list) -> str:
+        """在prompt中注入角色当前外貌描述"""
+        if not characters:
+            return prompt
+        enhancements = []
+        for char in characters:
+            appearance = char.current_appearance or char.description
+            enhancements.append(f"{char.name}的外貌: {appearance}")
+        if enhancements:
+            return prompt + "\n角色外貌要求: " + "; ".join(enhancements)
+        return prompt
 
     def _check_kling(self) -> bool:
         try:

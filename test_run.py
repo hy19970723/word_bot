@@ -44,6 +44,8 @@ def main():
         "episode_number": 1,
         "previous_episodes_summary": "",
         "character_descriptions": "",
+        "project_context": "",
+        "output_dir": f"output/{video_id}",
         "script": None,
         "production_plan": None,
         "generated_clips": {},

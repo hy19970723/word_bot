@@ -81,10 +81,10 @@ class ScreenwriterAgent(BaseAgent):
             if character_descriptions:
                 context_parts.append(f"\n\n【角色设定】\n{character_descriptions}")
             
-            # 注入前情提要
-            previous_summary = state.get("previous_episodes_summary", "")
-            if previous_summary and previous_summary != "这是第一集，没有前情提要。":
-                context_parts.append(f"\n\n【前情提要】\n{previous_summary}")
+            # 注入丰富的项目上下文（角色状态+伏笔+详细剧情回顾）
+            project_context = state.get("project_context", "")
+            if project_context:
+                context_parts.append(f"\n\n{project_context}")
             
             # 注入整体故事大纲
             if project.overall_story:

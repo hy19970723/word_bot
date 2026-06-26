@@ -2,6 +2,7 @@ import sys
 import uuid
 import logging
 import structlog
+from pathlib import Path
 
 from src.graph import build_graph
 from src.schemas.cost import CostTracker
@@ -32,11 +33,29 @@ def select_or_create_project(pm: ProjectManager):
         print("已有项目:")
         for i, p in enumerate(projects, 1):
             ep_count = len(p.episodes)
-            print(f"  [{i}] {p.name} ({p.genre}) - {ep_count}集")
+            char_count = len(p.characters)
+            char_with_ref = sum(1 for c in p.characters if c.reference_image_path)
+            print(f"  [{i}] {p.name} ({p.genre}) - {ep_count}集 - {char_count}角色({char_with_ref}有参考图)")
         print("  [0] 创建新项目")
         choice = input("请选择: ").strip()
         if choice != "0" and choice.isdigit() and 1 <= int(choice) <= len(projects):
-            return projects[int(choice) - 1]
+            selected = projects[int(choice) - 1]
+
+            # 显示项目详情
+            print(f"\n项目: {selected.name}")
+            if selected.characters:
+                print("角色:")
+                for char in selected.characters:
+                    ref_status = "✓" if char.reference_image_path else "✗"
+                    appearance = char.current_appearance or char.description
+                    print(f"  [{ref_status}] {char.name}: {appearance[:50]}...")
+
+            # 询问是否管理角色参考图
+            manage_ref = input("\n管理角色参考图? [y/N]: ").strip().lower()
+            if manage_ref == "y":
+                _manage_character_references(pm, selected)
+
+            return selected
 
     print("\n创建新项目:")
     name = input("项目名称 (如'赘婿逆袭'): ").strip()
@@ -73,7 +92,74 @@ def select_or_create_project(pm: ProjectManager):
         characters=characters,
     )
     print(f"\n项目已创建: {project.name} (ID: {project.project_id})")
+
+    if project.characters:
+        print("\n是否生成角色参考图? (用于保持角色外貌一致性)")
+        gen_ref = input("[y/N]: ").strip().lower()
+        if gen_ref == "y":
+            from src.services.kling import KlingService
+            kling = KlingService(cli_command=settings.kling_cli_command)
+            if kling.check_login():
+                for char in project.characters:
+                    print(f"\n正在生成 {char.name} 的参考图...")
+                    print(f"  描述: {char.description}")
+                    success = pm.generate_character_reference_image(project, char.name, kling)
+                    if success:
+                        print(f"  参考图已保存: {char.reference_image_path}")
+                    else:
+                        print("  生成失败，跳过")
+            else:
+                print("可灵未登录，跳过角色参考图生成")
+                print("提示: 运行 'kling login' 登录后可生成")
+
     return project
+
+
+def _manage_character_references(pm: ProjectManager, project):
+    """管理角色参考图"""
+    from src.services.kling import KlingService
+
+    kling = KlingService(cli_command=settings.kling_cli_command)
+    if not kling.check_login():
+        print("可灵未登录，无法生成参考图")
+        print("提示: 运行 'kling login' 登录")
+        return
+
+    if not project.characters:
+        print("该项目没有角色")
+        return
+
+    print("\n角色参考图管理:")
+    for i, char in enumerate(project.characters, 1):
+        ref_status = f"有: {char.reference_image_path}" if char.reference_image_path else "无"
+        appearance = char.current_appearance or char.description
+        print(f"  [{i}] {char.name}")
+        print(f"      外貌: {appearance}")
+        print(f"      参考图: {ref_status}")
+
+    while True:
+        choice = input("\n选择角色编号生成/更新参考图 (回车结束): ").strip()
+        if not choice:
+            break
+        if not choice.isdigit() or not (1 <= int(choice) <= len(project.characters)):
+            print("无效选择")
+            continue
+
+        char = project.characters[int(choice) - 1]
+        print(f"\n正在生成 {char.name} 的参考图...")
+        print(f"  描述: {char.current_appearance or char.description}")
+
+        # 允许修改描述
+        new_desc = input("  修改描述 (回车使用当前): ").strip()
+        if new_desc:
+            char.current_appearance = new_desc
+            pm.save_project(project)
+
+        success = pm.generate_character_reference_image(project, char.name, kling)
+        if success:
+            print(f"  参考图已保存: {char.reference_image_path}")
+        else:
+                            print("  生成失败")
 
 
 def format_character_descriptions(project) -> str:
@@ -81,9 +167,14 @@ def format_character_descriptions(project) -> str:
         return ""
     lines = []
     for char in project.characters:
-        line = f"- {char.name}: {char.description}"
+        appearance = char.current_appearance or char.description
+        line = f"- {char.name}: {appearance}"
         if char.personality:
             line += f"（性格: {char.personality}）"
+        if char.current_state:
+            line += f"（状态: {char.current_state}）"
+        if char.reference_image_path:
+            line += "（有参考图）"
         lines.append(line)
     return "\n".join(lines)
 
@@ -110,12 +201,14 @@ def main():
     episode_number = 1
     previous_summary = ""
     character_descriptions = ""
+    project_context = ""
 
     if use_project == "y":
         project = select_or_create_project(pm)
         episode_number = len(project.episodes) + 1
         previous_summary = pm.get_previous_episodes_summary(project)
         character_descriptions = format_character_descriptions(project)
+        project_context = pm.build_screenwriter_context(project)
         print(f"\n当前: {project.name} 第{episode_number}集")
 
     user_input = input("请输入视频主题: ").strip()
@@ -139,6 +232,13 @@ def main():
 
     video_id = str(uuid.uuid4())[:8]
 
+    # 确定输出目录
+    if project:
+        ep_dir = pm.get_episode_dir(project, episode_number)
+        output_dir = str(ep_dir)
+    else:
+        output_dir = str(Path(settings.output_dir) / video_id)
+
     initial_state = {
         "video_id": video_id,
         "user_input": user_input,
@@ -149,6 +249,8 @@ def main():
         "episode_number": episode_number,
         "previous_episodes_summary": previous_summary,
         "character_descriptions": character_descriptions,
+        "project_context": project_context,
+        "output_dir": output_dir,
         "script": None,
         "production_plan": None,
         "generated_clips": {},
@@ -176,16 +278,107 @@ def main():
 
         if project and result.get("script") and result.get("final_video_path"):
             from src.schemas.project import EpisodeSummary
+
+            # 收集本集的详细信息
+            print("\n" + "=" * 60)
+            print("  本集信息录入")
+            print("=" * 60)
+
+            # 剧情摘要
+            summary = input("本集剧情摘要: ").strip()
+            if not summary:
+                summary = result["script"].metadata.topic
+
+            # 关键事件
+            key_events = []
+            print("\n关键事件 (输入空行结束):")
+            while True:
+                event = input("  事件: ").strip()
+                if not event:
+                    break
+                key_events.append(event)
+
+            # 角色状态变化
+            character_states = {}
+            if project.characters:
+                print("\n角色状态变化 (回车跳过):")
+                for char in project.characters:
+                    current = char.current_state or "初始状态"
+                    new_state = input(f"  {char.name} (当前: {current}) -> 新状态: ").strip()
+                    if new_state:
+                        character_states[char.name] = new_state
+
+            # 伏笔管理
+            print("\n伏笔/剧情线索管理:")
+            plot_thread_ids = []
+
+            # 新增伏笔
+            print("新增伏笔 (输入空描述结束):")
+            while True:
+                desc = input("  伏笔描述: ").strip()
+                if not desc:
+                    break
+                importance = input("  重要性 [low/normal/high/critical] (默认normal): ").strip() or "normal"
+                thread = pm.add_plot_thread(project, desc, episode_number, importance)
+                plot_thread_ids.append(thread.thread_id)
+                print(f"  已添加: {thread.thread_id}")
+
+            # 解决已有伏笔
+            unresolved = [t for t in project.plot_threads if not t.resolved]
+            if unresolved:
+                print("\n未解决的伏笔:")
+                for t in unresolved:
+                    print(f"  [{t.thread_id}] {t.description} (第{t.introduced_episode}集)")
+                resolve_id = input("本集解决了哪个伏笔? (输入ID，回车跳过): ").strip()
+                if resolve_id:
+                    pm.resolve_plot_thread(project, resolve_id, episode_number)
+                    plot_thread_ids.append(resolve_id)
+
             episode = EpisodeSummary(
                 episode_number=episode_number,
                 title=result["script"].title,
-                summary=result["script"].metadata.topic,
-                script_path=f"output/{video_id}/script.json",
+                summary=summary,
+                script_path=f"{output_dir}/script.json",
                 video_path=result["final_video_path"],
                 characters_appeared=[c.name for c in project.characters],
+                character_states=character_states,
+                plot_threads=plot_thread_ids,
+                key_events=key_events,
             )
             pm.add_episode(project, episode)
-            print(f"已保存为 {project.name} 第{episode_number}集")
+
+            # 更新角色状态
+            if character_states:
+                pm.update_character_states(project, episode)
+
+            # 角色外貌变化
+            if project.characters:
+                print("\n角色外貌变化 (回车跳过):")
+                for char in project.characters:
+                    current_appearance = char.current_appearance or char.description
+                    new_appearance = input(f"  {char.name} (当前: {current_appearance}) -> 新外貌: ").strip()
+                    if new_appearance:
+                        reason = input("  变化原因: ").strip()
+                        pm.update_character_appearance(
+                            project, char.name, new_appearance, episode_number, reason
+                        )
+                        print(f"  已更新 {char.name} 的外貌")
+
+                        # 询问是否重新生成参考图
+                        regen = input(f"  是否重新生成 {char.name} 的参考图? [y/N]: ").strip().lower()
+                        if regen == "y":
+                            from src.services.kling import KlingService
+                            kling = KlingService(cli_command=settings.kling_cli_command)
+                            if kling.check_login():
+                                success = pm.generate_character_reference_image(project, char.name, kling)
+                                if success:
+                                    print(f"  参考图已更新: {char.reference_image_path}")
+                                else:
+                                    print("  生成失败")
+                            else:
+                                print("  可灵未登录，跳过")
+
+            print(f"\n已保存为 {project.name} 第{episode_number}集")
 
     except BudgetExceededError as e:
         logger.error("budget_exceeded", error=str(e))

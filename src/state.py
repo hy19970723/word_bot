@@ -20,6 +20,8 @@ class VideoState(TypedDict):
     episode_number: int
     previous_episodes_summary: str
     character_descriptions: str
+    project_context: str
+    output_dir: str
 
     script: Optional[Script]
     production_plan: Optional[ProductionPlan]
