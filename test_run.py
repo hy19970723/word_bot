@@ -1,7 +1,6 @@
 """非交互测试脚本 - 自动跳过人工审核"""
 import uuid
 import logging
-from src.graph import build_graph
 from src.schemas.cost import CostTracker
 from src.services.cost_tracker import CostTrackerService
 from src.agents.base import AgentError, BudgetExceededError
