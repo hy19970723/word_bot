@@ -202,7 +202,7 @@ def human_plan_review_node(state: VideoState) -> dict:
 
         total_cost += cost
         print(f"\n镜头 {shot.id} [{shot.type.value}] -> 可灵{media_type} (约{cost} CNY)")
-        print(f"  Prompt: {prompt[:100]}...")
+        print(f"  Prompt: {prompt}")
 
     print("\n" + "-" * 60)
     print(f"预估总成本: 约 {total_cost:.2f} CNY")
