@@ -41,6 +41,40 @@ class Project(BaseModel):
     genre: str = Field(default="story", description="类型: science/story/trending/product")
     overall_story: str = Field(default="", description="整体故事大纲")
     tone: str = Field(default="热血爽文", description="语气风格")
+
+    # 世界观
+    world_setting: str = Field(default="", description="世界观设定，如'现代都市，2025年'")
+
+    # 故事规划
+    planned_episodes: Optional[int] = Field(default=None, description="预计总集数")
+    story_arcs: list[dict] = Field(default_factory=list, description="故事阶段划分 [{name, episodes, description}]")
+
+    # 视觉风格
+    visual_style: str = Field(default="写实", description="画面风格: 电影感/动漫风/写实/赛博朋克等")
+    color_tone: str = Field(default="", description="色调偏好: 暗色调/暖色调/冷色调等")
+
+    # 音乐
+    bgm_style: str = Field(default="", description="BGM风格偏好: 紧张悬疑/热血激昂/温馨治愈等")
+    bgm_tracks: list[str] = Field(default_factory=list, description="已用过的BGM列表")
+
+    # 发布
+    target_platform: list[str] = Field(default_factory=lambda: ["douyin"], description="目标平台: douyin/tiktok/bilibili等")
+    publish_schedule: str = Field(default="", description="发布频率: 每天一集/每周一集等")
+    tags: list[str] = Field(default_factory=list, description="标签/关键词，用于SEO")
+
+    # 受众
+    target_audience: str = Field(default="", description="目标用户画像: 18-35岁男性等")
+
+    # 统计
+    total_cost: float = Field(default=0.0, description="累计花费(CNY)")
+    episode_costs: dict[str, float] = Field(default_factory=dict, description="每集花费记录 {集数: 花费}")
+
+    # 素材库
+    reusable_assets: list[dict] = Field(default_factory=list, description="可复用素材 [{name, type, path, description}]")
+
+    # 备注
+    notes: list[str] = Field(default_factory=list, description="创作备忘")
+
     characters: list[Character] = Field(default_factory=list, description="角色列表")
     episodes: list[EpisodeSummary] = Field(default_factory=list, description="已完成集数")
     plot_threads: list[PlotThread] = Field(default_factory=list, description="伏笔/剧情线索")

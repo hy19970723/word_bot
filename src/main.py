@@ -70,8 +70,47 @@ def select_or_create_project(pm: ProjectManager):
     tone = input("语气风格 (默认: 热血爽文): ").strip() or "热血爽文"
     overall_story = input("整体故事大纲 (可选，回车跳过): ").strip()
 
+    # 世界观和视觉风格
+    print("\n--- 世界观与视觉 ---")
+    world_setting = input("世界观设定 (如'现代都市，2025年'，可选): ").strip()
+    visual_style = input("画面风格 (电影感/动漫风/写实/赛博朋克，默认: 写实): ").strip() or "写实"
+    color_tone = input("色调偏好 (暗色调/暖色调/冷色调，可选): ").strip()
+
+    # 故事规划
+    print("\n--- 故事规划 ---")
+    planned_eps = input("预计总集数 (可选，回车跳过): ").strip()
+    planned_episodes = int(planned_eps) if planned_eps.isdigit() else None
+
+    story_arcs = []
+    print("故事阶段划分 (输入空名称结束):")
+    while True:
+        arc_name = input("  阶段名称 (如'入赘篇'): ").strip()
+        if not arc_name:
+            break
+        arc_episodes = input(f"  {arc_name} 集数范围 (如'1-5'): ").strip()
+        arc_desc = input(f"  {arc_name} 描述: ").strip()
+        story_arcs.append({
+            "name": arc_name,
+            "episodes": arc_episodes,
+            "description": arc_desc,
+        })
+
+    # 音乐和发布
+    print("\n--- 音乐与发布 ---")
+    bgm_style = input("BGM风格 (紧张悬疑/热血激昂/温馨治愈，可选): ").strip()
+    target_platform_input = input("目标平台 (逗号分隔: douyin,tiktok,bilibili，默认douyin): ").strip()
+    target_platform = [p.strip() for p in target_platform_input.split(",")] if target_platform_input else ["douyin"]
+    publish_schedule = input("发布频率 (每天一集/每周一集，可选): ").strip()
+
+    tags_input = input("标签/关键词 (逗号分隔，可选): ").strip()
+    tags = [t.strip() for t in tags_input.split(",")] if tags_input else []
+
+    target_audience = input("目标受众 (如'18-35岁男性'，可选): ").strip()
+
+    # 角色设定
     characters = []
-    print("\n角色设定 (输入空名称结束):")
+    print("\n--- 角色设定 ---")
+    print("角色设定 (输入空名称结束):")
     while True:
         char_name = input("  角色名称: ").strip()
         if not char_name:
@@ -84,11 +123,32 @@ def select_or_create_project(pm: ProjectManager):
             personality=char_personality,
         ))
 
+    # 创作备忘
+    notes = []
+    print("\n--- 创作备忘 ---")
+    print("创作备忘 (输入空行结束):")
+    while True:
+        note = input("  备忘: ").strip()
+        if not note:
+            break
+        notes.append(note)
+
     project = pm.create_project(
         name=name,
         genre=genre,
         overall_story=overall_story,
         tone=tone,
+        world_setting=world_setting,
+        planned_episodes=planned_episodes,
+        story_arcs=story_arcs,
+        visual_style=visual_style,
+        color_tone=color_tone,
+        bgm_style=bgm_style,
+        target_platform=target_platform,
+        publish_schedule=publish_schedule,
+        tags=tags,
+        target_audience=target_audience,
+        notes=notes,
         characters=characters,
     )
     print(f"\n项目已创建: {project.name} (ID: {project.project_id})")
@@ -350,6 +410,12 @@ def main():
             # 更新角色状态
             if character_states:
                 pm.update_character_states(project, episode)
+
+            # 记录本集花费
+            episode_cost = result["cost_tracker"].usage.total_cost
+            project.episode_costs[str(episode_number)] = episode_cost
+            project.total_cost += episode_cost
+            pm.save_project(project)
 
             # 角色外貌变化
             if project.characters:

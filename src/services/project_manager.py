@@ -62,6 +62,17 @@ class ProjectManager:
         overall_story: str = "",
         tone: str = "热血爽文",
         characters: Optional[list[Character]] = None,
+        world_setting: str = "",
+        planned_episodes: Optional[int] = None,
+        story_arcs: Optional[list[dict]] = None,
+        visual_style: str = "写实",
+        color_tone: str = "",
+        bgm_style: str = "",
+        target_platform: Optional[list[str]] = None,
+        publish_schedule: str = "",
+        tags: Optional[list[str]] = None,
+        target_audience: str = "",
+        notes: Optional[list[str]] = None,
     ) -> Project:
         project_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         now = datetime.now().isoformat()
@@ -72,6 +83,17 @@ class ProjectManager:
             genre=genre,
             overall_story=overall_story,
             tone=tone,
+            world_setting=world_setting,
+            planned_episodes=planned_episodes,
+            story_arcs=story_arcs or [],
+            visual_style=visual_style,
+            color_tone=color_tone,
+            bgm_style=bgm_style,
+            target_platform=target_platform or ["douyin"],
+            publish_schedule=publish_schedule,
+            tags=tags or [],
+            target_audience=target_audience,
+            notes=notes or [],
             characters=characters or [],
             episodes=[],
             plot_threads=[],
@@ -124,10 +146,34 @@ class ProjectManager:
         return "\n".join(summaries)
 
     def build_screenwriter_context(self, project: Project) -> str:
-        if not project.episodes:
-            return ""
-
         context_parts = []
+
+        # 世界观和视觉风格（始终注入）
+        if project.world_setting:
+            context_parts.append(f"【世界观】{project.world_setting}")
+        if project.visual_style:
+            context_parts.append(f"【视觉风格】{project.visual_style}")
+        if project.color_tone:
+            context_parts.append(f"【色调】{project.color_tone}")
+        if context_parts:
+            context_parts.append("")
+
+        # 故事规划
+        if project.story_arcs:
+            context_parts.append("【故事阶段】")
+            for arc in project.story_arcs:
+                context_parts.append(f"- {arc.get('name', '未命名')}: {arc.get('description', '')}")
+            context_parts.append("")
+
+        # 创作备忘
+        if project.notes:
+            context_parts.append("【创作备忘】")
+            for note in project.notes:
+                context_parts.append(f"- {note}")
+            context_parts.append("")
+
+        if not project.episodes:
+            return "\n".join(context_parts)
 
         if project.characters:
             context_parts.append("【角色当前状态】")
