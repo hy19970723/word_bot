@@ -1,7 +1,7 @@
 # AI Video Studio — 代码结构说明书
 
-> 多Agent协作的短视频自动化生产系统
-> 技术栈：DeepSeek + 可灵(Kling) + MoviePy + LangGraph
+> 多Agent协作的短视频自动化生产系统，支持连续剧/系列视频创作
+> 技术栈：DeepSeek + 可灵(Kling CLI) + MoviePy + LangGraph
 
 ---
 
@@ -12,6 +12,9 @@ ai-video-studio/
 ├── pyproject.toml                 # 项目配置、依赖管理
 ├── .env.example                   # 环境变量模板
 ├── .gitignore
+├── README.md                      # 项目简介
+├── CODE_STRUCTURE.md              # 本文档
+├── test_run.py                    # 非交互测试脚本
 │
 ├── config/                        # 配置层
 │   ├── settings.py                # 全局配置（Pydantic Settings）
@@ -22,13 +25,13 @@ ai-video-studio/
 │       │   ├── trending.txt       # 热点追踪
 │       │   └── product.txt        # 产品带货
 │       ├── director/
-│       │   └── default.txt        # 导演Agent模板
+│       │   └── default.txt        # 导演Agent模板（当前未使用）
 │       └── reviewer/
 │           └── default.txt        # 审核Agent模板
 │
 ├── src/                           # 源码层
-│   ├── main.py                    # CLI入口
-│   ├── graph.py                   # LangGraph状态机（流程编排）
+│   ├── main.py                    # CLI入口（项目管理+流水线启动）
+│   ├── graph.py                   # LangGraph状态机（流程编排+人工审核）
 │   ├── state.py                   # 全局状态类型定义
 │   │
 │   ├── agents/                    # Agent层（4个角色）
@@ -39,34 +42,43 @@ ai-video-studio/
 │   │   └── reviewer.py            # 审核Agent
 │   │
 │   ├── services/                  # 服务层（基础设施）
-│   │   ├── llm.py                 # DeepSeek LLM调用
-│   │   ├── kling.py               # 可灵视频生成API
-│   │   ├── image_gen.py           # 占位图生成
-│   │   ├── tts.py                 # 静音音频占位
-│   │   ├── video_compose.py       # MoviePy视频合成
-│   │   └── cost_tracker.py        # 成本追踪
+│   │   ├── llm.py                 # DeepSeek LLM调用（chat/reasoner分级）
+│   │   ├── kling.py               # 可灵CLI调用（文生视频/图生视频/文生图）
+│   │   ├── image_gen.py           # 占位图生成（Pillow）
+│   │   ├── tts.py                 # TTS语音合成（Edge-TTS/静音占位）
+│   │   ├── video_compose.py       # MoviePy视频合成（拼接+字幕）
+│   │   ├── cost_tracker.py        # 成本追踪
+│   │   └── project_manager.py     # 项目管理（CRUD+集数+角色+伏笔）
 │   │
 │   ├── schemas/                   # 数据模型层（Pydantic）
-│   │   ├── script.py              # 分镜脚本 Schema
-│   │   ├── plan.py                # 制作任务书 Schema
-│   │   ├── review.py              # 审核报告 Schema
-│   │   └── cost.py                # 成本追踪 Schema
+│   │   ├── script.py              # Script/Shot（分镜脚本）
+│   │   ├── plan.py                # ProductionPlan（制作任务书）
+│   │   ├── review.py              # ReviewReport（审核报告）
+│   │   ├── cost.py                # CostTracker（成本追踪）
+│   │   └── project.py             # Project/Character/Episode/PlotThread
 │   │
 │   └── utils/                     # 工具层
 │       ├── media.py               # 视频信息获取
 │       └── sensitive_words.py     # 敏感词检测
 │
-├── output/                        # 运行时输出（gitignore）
+├── projects/                      # 项目数据（gitignore）
+│   └── {项目名}/
+│       ├── project.json           # 项目数据
+│       ├── characters/            # 角色参考图
+│       └── episodes/ep{N}/        # 每集输出
 │
-└── tests/                         # 测试层（60个用例）
+├── output/                        # 非项目模式的输出（gitignore）
+│
+└── tests/                         # 测试层（100个用例）
     ├── conftest.py                # 公共fixtures
     ├── test_schemas.py            # Schema校验
     ├── test_screenwriter.py       # 编剧Agent
     ├── test_director.py           # 导演Agent
     ├── test_editor.py             # 剪辑/合成
     ├── test_reviewer.py           # 审核/敏感词
-    ├── test_kling.py              # 可灵API
+    ├── test_kling.py              # 可灵CLI
     ├── test_cost_tracker.py       # 成本追踪
+    ├── test_project.py            # 项目管理
     └── test_graph.py              # 状态机路由
 ```
 
@@ -78,13 +90,13 @@ ai-video-studio/
 ┌─────────────────────────────────────────────────────┐
 │                   CLI 用户交互层                      │
 │              src/main.py + graph.py                  │
-│         收集输入 → 启动流水线 → 人工审核节点            │
+│    项目管理 → 收集输入 → 启动流水线 → 人工审核节点      │
 └───────────────────────┬─────────────────────────────┘
                         ▼
 ┌─────────────────────────────────────────────────────┐
 │              编排调度层 (LangGraph)                    │
 │                   src/graph.py                       │
-│    状态机 + 条件路由 + 人工审核 + 打回循环              │
+│    状态机 + 条件路由 + 3个人工审核 + 打回循环           │
 └───────────────────────┬─────────────────────────────┘
                         ▼
 ┌─────────────────────────────────────────────────────┐
@@ -92,340 +104,271 @@ ai-video-studio/
 │                                                      │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ │
 │  │ 编剧Agent │ │ 导演Agent │ │ 剪辑Agent │ │审核Agent│ │
-│  │screenwrit│ │ director │ │  editor  │ │reviewer│ │
+│  │DeepSeek  │ │ 纯规则    │ │ 可灵+合成 │ │DeepSeek│ │
 │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └───┬────┘ │
-│       │            │            │            │      │
 └───────┼────────────┼────────────┼────────────┼──────┘
         ▼            ▼            ▼            ▼
 ┌─────────────────────────────────────────────────────┐
 │                  Service 服务层                       │
 │                                                      │
 │  ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────────┐ │
-│  │DeepSeek│ │  可灵   │ │占位图/音│ │ MoviePy合成  │ │
-│  │  LLM   │ │ 视频API │ │ 频生成  │ │ 拼接+字幕   │ │
+│  │DeepSeek│ │可灵CLI │ │Edge-TTS│ │ MoviePy合成  │ │
+│  │  LLM   │ │视频/图片│ │/静音   │ │ 拼接+字幕   │ │
 │  └────────┘ └────────┘ └────────┘ └──────────────┘ │
 │                                                      │
-│  ┌──────────────┐                                    │
-│  │  成本追踪服务  │                                    │
-│  └──────────────┘                                    │
+│  ┌──────────────┐ ┌──────────────────┐              │
+│  │  成本追踪服务  │ │  项目管理服务     │              │
+│  └──────────────┘ └──────────────────┘              │
 └─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. 四个Agent角色详解
+## 3. 流水线流程
 
-### 3.1 编剧Agent — `src/agents/screenwriter.py`
+```
+START → 编剧Agent → [①脚本审核] → 导演Agent → [②方案审核] → 剪辑Agent
+                                                              ↓
+END ← [③成片审核] ← 审核Agent ←──────────────────────────────┘
+         ↓ (打回)
+      剪辑Agent（最多2轮）
+```
 
-| 属性 | 值 |
-|------|-----|
-| **类名** | `ScreenwriterAgent` |
-| **位置** | `src/agents/screenwriter.py:36` |
-| **继承** | `BaseAgent` |
-| **调用LLM** | 是，`deepseek-chat`（creative档，temperature=0.8） |
-| **输入** | `user_input`, `content_type`, `tone`, `duration` |
-| **输出** | `Script` 对象（分镜脚本JSON） |
-| **Prompt模板** | `config/templates/screenwriter/{type}.txt` |
+### 3个人工审核节点
 
-**核心逻辑**：
-1. 根据 `content_type` 选择对应Prompt模板（science/story/trending/product）
-2. 根据 `duration` 和 `content_type` 计算镜头数量（`_calculate_shot_count`）
-3. 填充模板变量（主题、风格、时长、受众、镜头数、JSON Schema）
-4. 调用DeepSeek生成结构化JSON，用Pydantic校验
-5. 如果有人工反馈（打回场景），追加到prompt中
+| 节点 | 位置 | 展示内容 | 操作 |
+|------|------|---------|------|
+| ①脚本审核 | `graph.py:human_script_review_node` | 每个镜头的画面/旁白/字幕 | [a]确认 [r]修改 [q]取消 |
+| ②方案审核 | `graph.py:human_plan_review_node` | 可灵调用计划+完整prompt+预估成本 | [a]确认生成 [r]返回修改 [q]取消 |
+| ③成片审核 | `graph.py:human_video_review_node` | 视频文件+审核评分 | [a]确认 [r]重新剪辑 [q]取消 |
 
-**镜头数计算规则**（`_calculate_shot_count`）：
-
-| 类型 | 时长范围 | 镜头数 |
-|------|---------|--------|
-| science | 30-60s | 4-6 |
-| science | 60-120s | 6-10 |
-| science | 120-180s | 10-12 |
-| story | 60-120s | 6-10 |
-| story | 120-300s | 10-20 |
-| trending | 30-60s | 3-5 |
-| trending | 60-90s | 5-8 |
-| product | 30-60s | 4-8 |
-
-公式：`shot_count = max(min_shots, min(max_shots, duration // 10))`
+**②方案审核是关键**：在调用可灵（花钱）之前，显示每个镜头的完整prompt和预估总成本，确认后才开始生成。
 
 ---
 
-### 3.2 导演Agent — `src/agents/director.py`
+## 4. 四个Agent角色详解
+
+### 4.1 编剧Agent — `src/agents/screenwriter.py`
 
 | 属性 | 值 |
 |------|-----|
-| **类名** | `DirectorAgent` |
-| **位置** | `src/agents/director.py:45` |
-| **继承** | `BaseAgent` |
+| **调用LLM** | 是，DeepSeek（chat或reasoner，可配置） |
+| **输入** | 主题 + 类型 + 项目上下文（角色/前情/伏笔/世界观） |
+| **输出** | `Script` 对象（分镜脚本JSON） |
+| **Prompt模板** | `config/templates/screenwriter/{type}.txt` |
+
+**注入的项目上下文**：
+- 角色设定（外貌+性格+当前状态）
+- 角色当前外貌描述
+- 世界观设定 + 视觉风格 + 色调
+- 故事阶段划分
+- 创作备忘
+- 未解决的伏笔/剧情线索
+- 最近3集的详细回顾（摘要+关键事件+角色状态变化）
+- 整体故事大纲
+- 当前集数
+
+**模型选择**（`LLM_SCREENWRITER_TIER`）：
+- `auto` — science/story用reasoner，trending/product用chat
+- `chat` — 全部用deepseek-chat（快、省）
+- `reasoner` — 全部用deepseek-reasoner（深度思考）
+
+### 4.2 导演Agent — `src/agents/director.py`
+
+| 属性 | 值 |
+|------|-----|
 | **调用LLM** | 否（纯规则引擎） |
 | **输入** | `Script` 对象 |
 | **输出** | `ProductionPlan` 对象（制作任务书） |
 
-**核心逻辑**：
-不调LLM，完全基于规则决策：
+**决策规则**：
+- 素材质量：priority=high → hd，其他 → standard
+- BGM风格：幽默→轻快电子，严肃→简约钢琴，悬疑→暗黑氛围
+- 字幕动画：science→typewriter，story→fade，带货→slide_up
+- 转场：trending/product→cut，其他→crossfade
 
-1. **素材质量决策**（`_decide_quality_for_shot`）：
-   - `priority=high` → hd质量
-   - `priority=normal/low` → standard质量
-
-2. **BGM风格决策**（`_decide_bgm_style`）：
-   - 含"幽默/轻松/通俗" → 轻快电子
-   - 含"严肃/专业" → 简约钢琴
-   - 含"悬疑/紧张" → 暗黑氛围
-   - 默认 → 轻快电子
-
-3. **字幕动画决策**（`_decide_subtitle_animation`）：
-   - science → typewriter（打字机效果）
-   - story → fade（淡入淡出）
-   - trending/product → slide_up（上滑）
-
-4. **转场决策**（`_decide_transition`）：
-   - trending/product → cut（硬切，快节奏）
-   - 其他 → crossfade（交叉淡入淡出）
-
----
-
-### 3.3 剪辑Agent — `src/agents/editor.py`
+### 4.3 剪辑Agent — `src/agents/editor.py`
 
 | 属性 | 值 |
 |------|-----|
-| **类名** | `EditorAgent` |
-| **位置** | `src/agents/editor.py:15` |
-| **继承** | `BaseAgent` |
 | **调用LLM** | 否 |
-| **输入** | `Script` + `ProductionPlan` |
+| **调用服务** | KlingService + ImageGenService + TTSService + VideoComposeService |
+| **输入** | `Script` + `ProductionPlan` + `Project` |
 | **输出** | 视频文件路径 + 素材映射 |
-| **调用服务** | `KlingService` + `ImageGenService` + `TTSService` + `VideoComposeService` |
 
-**核心逻辑**：
+**生成策略**（`KLING_VIDEO_MODE`）：
+- `all_video` — 全部用可灵文生视频
+- `mixed` — 开头/结尾用视频，中间用图片
+- `all_image` — 全部用可灵文生图片（最省）
 
+**角色一致性**：
+- 自动匹配镜头中涉及的角色
+- 如果角色有参考图，优先用 `image_to_video`（图生视频）保持外貌一致
+- 在prompt中注入角色当前外貌描述
+
+**降级链**：
 ```
-1. 遍历每个shot → 调可灵API生成视频片段
-   ├── 成功 → 保存 clip_{id}.mp4
-   └── 失败 → 降级为占位图 shot_{id}.png
-
-2. 遍历每个shot → 生成音频（当前为静音占位）
-   └── 保存 narration_{id}.wav
-
-3. 调MoviePy合成最终视频
-   ├── 视频片段（或占位图）作为画面
-   ├── 音频叠加
-   └── 字幕烧录
-
-4. 保存 script.json + plan.json 到输出目录
+可灵文生视频 → 可灵图生视频(有参考图时) → 可灵文生图片 → 本地占位图
 ```
 
-**文件输出结构**：
-```
-output/{video_id}/
-├── assets/
-│   ├── clip_01.mp4          # 可灵生成的视频片段
-│   ├── clip_02.mp4
-│   ├── shot_03.png          # 可灵失败时的占位图
-│   ├── narration_01.wav     # 音频
-│   └── subtitles.srt        # 字幕文件
-├── script.json              # 分镜脚本快照
-├── plan.json                # 制作任务书快照
-└── draft.mp4                # 成片初稿
-```
-
----
-
-### 3.4 审核Agent — `src/agents/reviewer.py`
+### 4.4 审核Agent — `src/agents/reviewer.py`
 
 | 属性 | 值 |
 |------|-----|
-| **类名** | `ReviewerAgent` |
-| **位置** | `src/agents/reviewer.py:21` |
-| **继承** | `BaseAgent` |
-| **调用LLM** | 是，`deepseek-chat`（efficient档，temperature=0.3） |
-| **输入** | `Script` + `review_round` |
-| **输出** | `ReviewReport` 对象 |
+| **调用LLM** | 是，DeepSeek chat |
 | **通过分数** | 60分 |
-| **Prompt模板** | `config/templates/reviewer/default.txt` |
+| **可关闭** | `LLM_REVIEWER_ENABLED=false` |
 
-**核心逻辑**：
-
-审核分3步：
-
-1. **合规检查**（`_check_compliance`，不调LLM）：
-   - 敏感词库匹配（`src/utils/sensitive_words.py`）
-   - 命中即一票否决
-
-2. **技术检查**（`_check_technical`，不调LLM）：
-   - 镜头时长是否在2-30秒
-   - 字幕每行是否≤15字
-   - 总时长是否≥15秒
-
-3. **内容审核**（调LLM）：
-   - 将完整脚本发给DeepSeek评估
-   - 评估维度：技术质量(30%) + 内容质量(40%) + 平台适配(30%)
-
-**评分公式**：
-```
-overall_score = technical_quality × 0.3 + content_quality × 0.4 + platform_fit × 0.3
-
-判定规则：
-- 合规不通过 → 直接打回（一票否决）
-- overall_score ≥ 60 且合规通过 → approved
-- overall_score < 60 → revision_needed
-- 最多打回2轮，超过则强制输出当前最佳版本
-```
+**审核维度**：
+- 合规检查（一票否决）：敏感词匹配
+- 技术质量（30%）：时长/字幕/转场
+- 内容质量（40%）：叙事连贯/画面匹配/开头吸引力
+- 平台适配（30%）：标题/互动引导
 
 ---
 
-## 4. 状态机流程 — `src/graph.py`
+## 5. 项目管理系统
 
-### 4.1 流程图
+### 5.1 目录结构
 
 ```
-START
-  │
-  ▼
-screenwriting（编剧Agent）
-  │
-  ▼
-human_script_review（人工审核脚本）──→ [a]确认 ──→ directing
-  │                                    [r]修改 ──→ 回到screenwriting
-  │                                    [q]取消 ──→ END
-  ▼
-directing（导演Agent）
-  │
-  ▼
-editing（剪辑Agent）←──────────────────────────┐
-  │                                             │
-  ▼                                             │
-reviewing（审核Agent）                           │
-  │                                             │
-  ├── approved ──→ human_video_review           │
-  ├── revision_needed ──────────────────────────┘
-  └── max_rounds ──→ human_video_review
-                        │
-                        ├── [a]确认 ──→ END
-                        ├── [r]修改 ──→ editing
-                        └── [q]取消 ──→ END
+projects/
+├── 赘婿逆袭/
+│   ├── project.json              # 项目数据
+│   ├── characters/               # 角色参考图
+│   │   ├── 张伟.png
+│   │   └── 王美丽.png
+│   └── episodes/                 # 每集输出
+│       ├── ep01/
+│       │   ├── script.json
+│       │   ├── plan.json
+│       │   ├── draft.mp4
+│       │   └── assets/
+│       └── ep02/
+└── 校园恋爱/
+    └── ...
 ```
 
-### 4.2 节点定义
+### 5.2 Project 数据模型 — `src/schemas/project.py`
 
-| 节点名 | 类型 | 位置 | 说明 |
-|--------|------|------|------|
-| `screenwriting` | Agent | `graph.py:18` | 编剧Agent执行 |
-| `human_script_review` | 人工 | `graph.py:89` | 终端交互，展示脚本，等待确认/修改/取消 |
-| `directing` | Agent | `graph.py:20` | 导演Agent执行（纯规则） |
-| `editing` | Agent | `graph.py:21` | 剪辑Agent执行（可灵+合成） |
-| `reviewing` | Agent | `graph.py:22` | 审核Agent执行（LLM+规则） |
-| `human_video_review` | 人工 | `graph.py:121` | 终端交互，展示成片，等待确认/修改/取消 |
+```
+Project
+├── 基本信息: project_id, name, genre, tone
+├── 世界观: world_setting
+├── 故事规划: overall_story, planned_episodes, story_arcs[]
+├── 视觉风格: visual_style, color_tone
+├── 音乐: bgm_style, bgm_tracks[]
+├── 发布: target_platform[], publish_schedule, tags[]
+├── 受众: target_audience
+├── 统计: total_cost, episode_costs{}
+├── 素材库: reusable_assets[]
+├── 备注: notes[]
+├── characters: Character[]
+│   └── Character
+│       ├── name, description, personality
+│       ├── current_state（当前状态，随剧情更新）
+│       ├── current_appearance（当前外貌，可随剧情变化）
+│       ├── reference_image_path（角色参考图路径）
+│       └── appearance_history[]（外貌变化历史）
+├── episodes: EpisodeSummary[]
+│   └── EpisodeSummary
+│       ├── episode_number, title, summary
+│       ├── script_path, video_path
+│       ├── characters_appeared[]
+│       ├── character_states{}（角色状态变化）
+│       ├── plot_threads[]（涉及的伏笔ID）
+│       └── key_events[]（关键事件）
+├── plot_threads: PlotThread[]
+│   └── PlotThread
+│       ├── thread_id, description
+│       ├── introduced_episode, resolved, resolved_episode
+│       └── importance（low/normal/high/critical）
+└── created_at, updated_at
+```
 
-### 4.3 路由函数
+### 5.3 项目管理服务 — `src/services/project_manager.py`
 
-| 函数 | 位置 | 触发条件 | 路由目标 |
-|------|------|---------|---------|
-| `route_after_script_review` | `graph.py:60` | 人工审核脚本后 | approved→directing / revision→screenwriting / cancelled→END |
-| `route_after_review` | `graph.py:70` | 审核Agent完成后 | approved→human_video_review / revision_needed→editing / max_rounds→human_video_review |
-| `route_after_video_review` | `graph.py:79` | 人工审核成片后 | approved→END / revision→editing / cancelled→END |
+| 方法 | 作用 |
+|------|------|
+| `list_projects()` | 列出所有项目 |
+| `get_project(id)` | 按ID获取项目 |
+| `get_project_by_name(name)` | 按名称获取项目 |
+| `create_project(...)` | 创建项目（含目录初始化） |
+| `save_project(project)` | 保存项目到JSON |
+| `add_episode(project, episode)` | 添加集数 |
+| `get_episode_dir(project, ep_num)` | 获取集数输出目录 |
+| `get_previous_episodes_summary(project)` | 生成前情提要 |
+| `build_screenwriter_context(project)` | 构建编剧Agent完整上下文 |
+| `update_character_states(project, episode)` | 更新角色状态 |
+| `update_character_appearance(...)` | 更新角色外貌（含历史记录） |
+| `generate_character_reference_image(...)` | 用可灵生成角色参考图 |
+| `add_plot_thread(...)` | 添加伏笔/剧情线索 |
+| `resolve_plot_thread(...)` | 标记伏笔已解决 |
+| `delete_project(id)` | 删除整个项目目录 |
+
+### 5.4 连续剧工作流
+
+```
+第1集: 创建项目 → 设定角色 → 生成参考图 → 生成视频 → 录入信息 → 保存
+第2集: 选择项目 → 注入前情+角色+伏笔 → 生成视频 → 录入信息 → 保存
+第3集: 选择项目 → 注入前情+角色+伏笔 → 生成视频 → 录入信息 → 保存
+...
+```
+
+**每集结束后可录入**：
+- 剧情摘要
+- 关键事件
+- 角色状态变化
+- 角色外貌变化（可选重新生成参考图）
+- 新增伏笔
+- 解决已有伏笔
 
 ---
 
-## 5. 全局状态 — `src/state.py`
+## 6. 成本控制配置
 
-所有Agent通过 `VideoState` 共享数据，每个Agent只读写自己需要的字段：
+所有配置在 `.env` 中设置：
 
-```python
-class VideoState(TypedDict):
-    # ── 用户输入（初始化时写入）──
-    video_id: str              # 视频唯一ID
-    user_input: str            # 原始主题
-    content_type: str          # 内容类型: science/story/trending/product
-    tone: str                  # 语气风格
-    duration: int              # 目标时长（秒）
+### 6.1 可灵视频生成
 
-    # ── Agent产出 ──
-    script: Script             # 编剧Agent → 分镜脚本
-    production_plan: ProductionPlan  # 导演Agent → 制作任务书
-    generated_images: dict     # 剪辑Agent → {shot_id: 图片路径}
-    generated_audios: dict     # 剪辑Agent → {shot_id: 音频路径}
-    video_draft_path: str      # 剪辑Agent → 成片路径
-    final_video_path: str      # 审核通过后 → 最终视频路径
-    review_report: ReviewReport # 审核Agent → 审核报告
-    review_round: int          # 审核Agent → 当前轮次
+| 配置项 | 默认值 | 说明 | 省钱效果 |
+|--------|--------|------|---------|
+| `KLING_MODEL` | `kling-video-v2_5` | 最便宜的视频模型 | ~30% |
+| `KLING_RESOLUTION` | `720p` | 标准画质 | ~50% |
+| `KLING_DURATION` | `5` | 固定5秒 | ~50% |
+| `KLING_VIDEO_MODE` | `all_video` | all_video/mixed/all_image | mixed省~40% |
+| `KLING_IMAGE_MODEL` | `kling-image-v2_1` | 最便宜的图片模型 | 图片免费 |
+| `KLING_IMAGE_RESOLUTION` | `1k` | 图片标准分辨率 | - |
+| `PREVIEW_MODE` | `false` | 只生成第1个镜头 | 省~75% |
+| `MAX_SHOTS` | `4` | 最大镜头数 | 按比例省 |
 
-    # ── 全局控制 ──
-    cost_tracker: CostTracker  # 成本追踪器
-    human_feedback: str        # 人工反馈内容
-    human_action: str          # 人工操作类型: approve/revise/cancel
-    status: str                # 流水线状态
-    error: str                 # 错误信息
-```
+### 6.2 LLM
 
-**status 状态流转**：
-```
-pending → screenwriting → awaiting_script_review → directing → editing → reviewing → awaiting_video_review → completed
-```
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `LLM_SCREENWRITER_TIER` | `chat` | auto/chat/reasoner |
+| `LLM_REVIEWER_ENABLED` | `true` | 是否启用审核Agent |
+| `LLM_REVIEWER_TIER` | `efficient` | 审核模型档位 |
 
----
+### 6.3 预算
 
-## 6. 数据模型（Schemas）
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `MAX_TOKENS_PER_VIDEO` | 8000 | 单视频最大token数 |
+| `MAX_IMAGES_PER_VIDEO` | 8 | 单视频最大生成数 |
+| `COST_LIMIT_PER_VIDEO` | 5.0 | 单视频预算上限(CNY) |
 
-### 6.1 Script（分镜脚本）— `src/schemas/script.py`
+### 6.4 最省方案
 
-核心结构，所有Agent围绕此交互：
-
-```
-Script
-├── script_id, title, style, tone, total_duration
-├── metadata: {topic, target_audience, keywords, platform}
-├── global_settings: {voice_id, voice_speed, subtitle_font, ...}
-└── shots: [Shot, Shot, ...]
-    └── Shot
-        ├── id, type(opening/content/transition/closing)
-        ├── duration(2-30秒), image_prompt(10-500字)
-        ├── narration(旁白), subtitle(字幕)
-        ├── transition_in/out, camera_effect, bgm_mood
-        └── priority(high/normal/low)
-```
-
-### 6.2 ProductionPlan（制作任务书）— `src/schemas/plan.py`
-
-```
-ProductionPlan
-├── plan_id, script_id
-├── shot_sources: [{shot_id, source, generate_prompt, image_model}, ...]
-├── generation_params: {image_model, image_size, image_quality}
-├── audio_plan: {tts_engine, voice_id, voice_speed, bgm_volume}
-├── edit_plan: {default_transition, subtitle_animation}
-└── budget: {max_images_to_generate, max_cost}
-```
-
-### 6.3 ReviewReport（审核报告）— `src/schemas/review.py`
-
-```
-ReviewReport
-├── review_id, script_id, round, max_rounds
-├── verdict: approved / revision_needed
-├── overall_score: 0-100
-├── dimensions: {
-│     compliance: {score, passed, issues},        ← 一票否决
-│     technical_quality: {score, passed, issues}, ← 权重30%
-│     content_quality: {score, passed, issues},   ← 权重40%
-│     platform_fit: {score, passed, issues}       ← 权重30%
-│   }
-└── revision_instructions: 打回时的修改指引
-```
-
-### 6.4 CostTracker（成本追踪）— `src/schemas/cost.py`
-
-```
-CostTracker
-├── video_id
-├── budget: {max_tokens, max_images, max_retry_rounds, cost_limit}
-├── usage: {
-│     tokens: {agent_name: {prompt_tokens, completion_tokens, cost}},
-│     images: {ai_generated, cost},
-│     tts_cost, total_cost
-│   }
-└── status: within_budget / warning / exceeded
+```env
+KLING_VIDEO_MODE=all_image
+KLING_MODEL=kling-video-v2_5
+KLING_RESOLUTION=720p
+KLING_DURATION=5
+MAX_SHOTS=2
+PREVIEW_MODE=true
+LLM_SCREENWRITER_TIER=chat
+LLM_REVIEWER_ENABLED=false
 ```
 
 ---
@@ -436,206 +379,92 @@ CostTracker
 
 | 属性 | 值 |
 |------|-----|
-| **后端** | DeepSeek API (api.deepseek.com) |
-| **模型** | `deepseek-chat` |
-| **认证** | API Key |
+| **后端** | DeepSeek API |
+| **模型** | `deepseek-chat` / `deepseek-reasoner` |
 | **输出格式** | 强制JSON（`response_format: json_object`） |
-| **重试** | JSON解析失败最多重试2次，每次追加错误提示 |
+| **重试** | JSON解析失败最多重试2次 |
 
-**模型分级**：
+**价格**（元/百万token）：
+| 模型 | 输入 | 输出 |
+|------|------|------|
+| deepseek-chat | ¥1.0 | ¥2.0 |
+| deepseek-reasoner | ¥4.0 | ¥16.0 |
 
-| 档位 | 模型 | temperature | 用途 |
-|------|------|-------------|------|
-| creative | deepseek-chat | 0.8 | 编剧Agent（高创意） |
-| efficient | deepseek-chat | 0.3 | 审核Agent（结构化评估） |
-
-**价格**（DeepSeek官方定价，单位：元/百万token）：
-- 输入：¥1.0 / 百万token
-- 输出：¥2.0 / 百万token
-
-### 7.2 可灵视频服务 — `src/services/kling.py`
+### 7.2 可灵CLI服务 — `src/services/kling.py`
 
 | 属性 | 值 |
 |------|-----|
-| **后端** | 可灵API (api.klingai.com) |
-| **认证** | JWT（access_key + secret_key → HS256签名） |
-| **模式** | 异步：提交任务 → 轮询结果 → 下载视频 |
-| **轮询间隔** | 5秒 |
-| **最大等待** | 300秒 |
-| **默认模型** | `kling-v2-5-turbo` |
+| **后端** | 可灵CLI（`@klingai/cli-cn`） |
+| **认证** | OAuth浏览器登录（`kling login`） |
+| **模式** | 异步：提交任务 → `--poll` 自动等待 → 下载 |
+| **默认模型** | `kling-video-v2_5` |
 
-**支持的视频参数**：
-- 时长：5秒 或 10秒
-- 画面比例：9:16（竖屏）
-- 分辨率：1080p
+**支持的操作**：
+| 方法 | CLI命令 | 用途 |
+|------|---------|------|
+| `text_to_video()` | `kling text_to_video` | 文生视频 |
+| `text_to_image()` | `kling text_to_image` | 文生图 |
+| `image_to_video()` | `kling image_to_video` | 图生视频（角色一致性） |
+| `check_login()` | `kling who_am_i` | 检查登录状态 |
 
-**价格参考**：
+**价格参考**（720p）：
 | 模型 | 5秒 | 10秒 |
 |------|-----|------|
-| kling-v2-5-turbo | $0.35 (~¥2.5) | - |
-| kling-v2-6-std | $0.28 (~¥2.0) | - |
-| kling-v2-6-pro | $0.49 (~¥3.5) | $0.98 (~¥7.1) |
+| kling-video-v2_5 | ~¥1.76 | ~¥3.53 |
+| kling-video-v2_6 | ~¥2.02 | ~¥4.03 |
+| kling-video-v3_0_turbo | ~¥3.53 | ~¥7.06 |
 
-### 7.3 占位图服务 — `src/services/image_gen.py`
+### 7.3 其他服务
 
-可灵API调用失败时的降级方案：用Pillow生成灰色占位图（1080×1920），上面显示prompt文字。
-
-### 7.4 静音音频服务 — `src/services/tts.py`
-
-生成对应时长的静音WAV文件（44100Hz, 16bit, 单声道），作为TTS未集成时的占位。
-
-### 7.5 视频合成服务 — `src/services/video_compose.py`
-
-| 属性 | 值 |
-|------|-----|
-| **后端** | MoviePy |
-| **分辨率** | 1080×1920 (9:16竖屏) |
-| **帧率** | 30fps |
-| **编码** | libx264 + AAC |
-
-**合成流程**：
-1. 遍历每个shot：
-   - 优先使用可灵生成的视频片段（`VideoFileClip`）
-   - 降级使用占位图（`ImageClip`）
-   - 叠加音频（`AudioFileClip`）
-   - 叠加字幕（`TextClip` + `CompositeVideoClip`）
-2. 拼接所有片段（`concatenate_videoclips`）
-3. 输出最终MP4
-
-### 7.6 成本追踪服务 — `src/services/cost_tracker.py`
-
-追踪每个Agent的token消耗和图片/视频生成费用，超预算时触发降级或停止。
-
-**预算控制**：
-- Token总量 > 8000 → 超限
-- 图片/视频数 > 8 → 超限
-- 总花费 > ¥5.0 → 超限
-- 花费达到80% → 预警
+| 服务 | 文件 | 说明 |
+|------|------|------|
+| 占位图 | `image_gen.py` | Pillow生成灰色占位图（可灵失败时降级） |
+| TTS | `tts.py` | Edge-TTS语音合成 / 静音WAV占位 |
+| 视频合成 | `video_compose.py` | MoviePy拼接+字幕（微软雅黑字体） |
+| 成本追踪 | `cost_tracker.py` | 记录token/图片/TTS费用 |
+| 项目管理 | `project_manager.py` | 项目CRUD+角色+伏笔+集数管理 |
 
 ---
 
-## 8. 关键Prompt模板
+## 8. 全局状态 — `src/state.py`
 
-### 8.1 编剧Prompt — 科普类 (`config/templates/screenwriter/science.txt`)
+```python
+class VideoState(TypedDict):
+    # 用户输入
+    video_id, user_input, content_type, tone, duration
 
-```
-你是一个专业的抖音短视频编剧，擅长将复杂知识转化为通俗易懂、引人入胜的短视频脚本。
+    # 项目上下文
+    project, episode_number, previous_episodes_summary
+    character_descriptions, project_context, output_dir
 
-请根据以下信息创作分镜脚本：
+    # Agent产出
+    script, production_plan
+    generated_clips, generated_images, generated_audios
+    video_draft_path, final_video_path
+    review_report, review_round
 
-【主题】{topic}
-【风格】{tone}
-【目标时长】{duration}秒
-【目标受众】{target_audience}
-【镜头数量】{shot_count}个
-
-创作要求：
-1. 开头（第1个镜头）必须有强吸引力的hook，用提问、反常识或惊人数据抓住注意力
-2. 中间镜头按照"是什么→为什么→怎么样"的逻辑展开
-3. 最后一个镜头要有总结或引导互动
-4. 每个镜头时长5-15秒
-5. image_prompt必须具体、可视化，描述一个明确的画面场景
-6. narration要口语化，像在跟朋友聊天
-7. subtitle用\n换行，每行不超过15个字
-8. 合理分配transition和camera_effect
-
-请严格按照以下JSON格式输出：
-{json_schema}
-```
-
-**变量说明**：
-- `{topic}` — 用户输入的主题
-- `{tone}` — 语气风格（如"幽默通俗"）
-- `{duration}` — 目标时长（秒）
-- `{target_audience}` — 目标受众（固定为"抖音用户"）
-- `{shot_count}` — 计算出的镜头数
-- `{json_schema}` — Script模型的JSON Schema（运行时注入）
-
-### 8.2 编剧Prompt — 其他类型
-
-| 类型 | 模板文件 | 核心差异 |
-|------|---------|---------|
-| 故事类 | `story.txt` | 要求有悬念/冲突/转折/反转 |
-| 热点类 | `trending.txt` | 要求直接切入热点、独特视角 |
-| 带货类 | `product.txt` | 要求痛点切入→产品亮点→引导购买 |
-
-### 8.3 导演Prompt (`config/templates/director/default.txt`)
-
-> 注意：当前导演Agent是纯规则引擎，不调LLM，此模板保留用于未来扩展。
-
-```
-你是一个短视频导演，负责将编剧的分镜脚本转化为可执行的制作方案。
-
-以下是分镜脚本：
-{script_json}
-
-决策规则：
-- priority为high → 高质量AI生图（hd质量）
-- priority为normal → 标准AI生图（standard质量）
-- priority为low → 标准AI生图（standard质量）
-
-同时决策：BGM风格、转场节奏、字幕动画
-```
-
-### 8.4 审核Prompt (`config/templates/reviewer/default.txt`)
-
-```
-你是一个短视频内容审核专家。请对以下视频脚本进行多维度审核。
-
-视频标题：{title}
-视频类型：{style}
-总时长：{total_duration}秒
-镜头数：{shot_count}个
-
-分镜脚本：
-{script_json}
-
-评估维度：
-1. 技术质量（权重30%）：时长合理性、字幕规范、转场合理性
-2. 内容质量（权重40%）：叙事连贯性、画面-旁白匹配、开头吸引力
-3. 平台适配（权重30%）：标题吸引力、平台适配度、互动引导
-4. 合规检查（一票否决）：敏感词、版权风险、虚假信息
+    # 全局控制
+    cost_tracker, human_feedback, human_action, status, error
 ```
 
 ---
 
-## 9. 配置说明 — `config/settings.py`
-
-| 配置项 | 环境变量 | 默认值 | 说明 |
-|--------|---------|--------|------|
-| `deepseek_api_key` | `DEEPSEEK_API_KEY` | (必填) | DeepSeek API Key |
-| `deepseek_base_url` | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek API地址 |
-| `kling_access_key` | `KLING_ACCESS_KEY` | (必填) | 可灵 Access Key |
-| `kling_secret_key` | `KLING_SECRET_KEY` | (必填) | 可灵 Secret Key |
-| `kling_base_url` | `KLING_BASE_URL` | `https://api.klingai.com` | 可灵 API地址 |
-| `kling_model` | `KLING_MODEL` | `kling-v2-5-turbo` | 可灵模型 |
-| `max_tokens_per_video` | `MAX_TOKENS_PER_VIDEO` | 8000 | 单视频最大token数 |
-| `max_images_per_video` | `MAX_IMAGES_PER_VIDEO` | 8 | 单视频最大生成数 |
-| `cost_limit_per_video` | `COST_LIMIT_PER_VIDEO` | 5.0 | 单视频预算上限(元) |
-| `output_dir` | `OUTPUT_DIR` | `./output` | 输出目录 |
-
----
-
-## 10. 运行与测试
+## 9. 运行与测试
 
 ### 启动
 
 ```bash
-# 1. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入 DEEPSEEK_API_KEY 和 KLING_ACCESS_KEY/SECRET_KEY
+# 主入口（交互式）
+python -m src.main
 
-# 2. 安装依赖
-pip install -e ".[dev]"
-
-# 3. 运行
-python src/main.py
+# 非交互测试（自动批准所有审核）
+python test_run.py
 ```
 
 ### 测试
 
 ```bash
-# 运行全部60个测试
+# 运行全部100个测试
 pytest tests/ -v
 
 # 运行lint检查
@@ -646,11 +475,12 @@ ruff check src/ tests/ config/
 
 | 测试文件 | 用例数 | 覆盖范围 |
 |---------|--------|---------|
-| `test_schemas.py` | 12 | Schema序列化/反序列化/边界值校验 |
-| `test_screenwriter.py` | 9 | 镜头数计算 + Agent执行（Mock LLM） |
-| `test_director.py` | 11 | 质量/BGM/字幕/转场决策规则 |
+| `test_schemas.py` | 12 | Schema序列化/反序列化/边界值 |
+| `test_screenwriter.py` | 14 | 镜头数计算 + 模型选择 + Agent执行 |
+| `test_director.py` | 11 | 质量/BGM/字幕/转场决策 |
 | `test_editor.py` | 2 | SRT时间格式化 + 字幕生成 |
 | `test_reviewer.py` | 4 | 敏感词检测 |
-| `test_kling.py` | 3 | JWT生成 + Header格式 + 价格查询 |
-| `test_cost_tracker.py` | 8 | 成本记录 + 超限检测 + 报告生成 |
-| `test_graph.py` | 9 | 状态机路由逻辑（3个路由函数） |
+| `test_kling.py` | 21 | CLI调用 + URL提取 + 成本估算 |
+| `test_cost_tracker.py` | 8 | 成本记录 + 超限检测 |
+| `test_project.py` | 14 | 项目CRUD + 集数 + 伏笔 |
+| `test_graph.py` | 9 | 状态机路由逻辑 |
