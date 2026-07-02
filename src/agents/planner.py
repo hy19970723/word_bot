@@ -103,9 +103,9 @@ class PlannerAgent:
         )
 
         try:
-            result = self.llm.generate_structured(prompt, ProjectPlan)
-            logger.info("planner_success", project_name=result.name, character_count=len(result.characters))
-            return result
+            plan, usage = self.llm.generate_structured(prompt, ProjectPlan)
+            logger.info("planner_success", project_name=plan.name, character_count=len(plan.characters), cost=usage.get("cost", 0))
+            return plan
         except Exception as e:
             logger.error("planner_failed", error=str(e))
             return None
