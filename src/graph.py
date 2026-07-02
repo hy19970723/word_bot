@@ -17,6 +17,7 @@ def build_graph():
     reviewer = ReviewerAgent()
 
     graph.add_node("screenwriting", screenwriter.execute)
+    graph.add_node("extract_characters", extract_characters_node)
     graph.add_node("auto_script_review", auto_script_review_node)
     graph.add_node("human_script_review", human_script_review_node)
     graph.add_node("directing", director.execute)
@@ -26,10 +27,11 @@ def build_graph():
     graph.add_node("skip_review", skip_review_node)
     graph.add_node("human_video_review", human_video_review_node)
 
-    # 编剧 → 自动审核循环
+    # 编剧 → 角色提取 → 自动审核循环
     graph.add_edge(START, "screenwriting")
+    graph.add_edge("screenwriting", "extract_characters")
     graph.add_conditional_edges(
-        "screenwriting",
+        "extract_characters",
         route_screenwriting_to_auto_review,
         {
             "auto_review": "auto_script_review",
@@ -101,6 +103,53 @@ def build_graph():
     )
 
     return graph.compile()
+
+
+def extract_characters_node(state: VideoState) -> dict:
+    """从脚本中自动提取角色信息"""
+    project = state.get("project")
+    script = state.get("script")
+
+    if not project or not script:
+        return {}
+
+    if project.characters:
+        return {}
+
+    from src.services.character_extractor import CharacterExtractor
+    from src.services.project_manager import ProjectManager
+
+    extractor = CharacterExtractor()
+    characters = extractor.extract(script)
+
+    if characters:
+        project.characters = characters
+        pm = ProjectManager()
+        pm.save_project(project)
+
+        print(f"\n[自动提取] 发现 {len(characters)} 个角色:")
+        for char in characters:
+            print(f"  - {char.name}: {char.description[:60]}...")
+
+        return {
+            "project": project,
+            "character_descriptions": _format_character_descriptions(project),
+        }
+
+    return {}
+
+
+def _format_character_descriptions(project) -> str:
+    if not project or not project.characters:
+        return ""
+    lines = []
+    for char in project.characters:
+        appearance = char.current_appearance or char.description
+        line = f"- {char.name}: {appearance}"
+        if char.personality:
+            line += f"（性格: {char.personality}）"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def route_screenwriting_to_auto_review(state: VideoState) -> str:
