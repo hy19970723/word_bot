@@ -1,7 +1,6 @@
 """策划Agent - 从一句话生成完整项目规划"""
 from typing import Optional
 from pydantic import BaseModel, Field
-from src.agents.base import BaseAgent
 from src.schemas.project import Project, Character
 from src.services.llm import LLMService
 from src.services.project_manager import ProjectManager
@@ -85,11 +84,11 @@ PLANNER_PROMPT = """你是一个专业的短视频内容策划专家。请根据
 """
 
 
-class PlannerAgent(BaseAgent):
+class PlannerAgent:
     """策划Agent - 生成项目规划"""
 
     def __init__(self):
-        super().__init__("planner")
+        self.name = "planner"
         self.llm = LLMService(model_tier="reasoning")
 
     def plan(self, user_input: str) -> Optional[ProjectPlan]:
