@@ -37,7 +37,18 @@ def select_or_create_project(pm: ProjectManager):
             print(f"  [{i}] {p.name} ({p.genre}) - {ep_count}集 - {char_count}角色")
         print("  [0] 创建新项目")
         print("  [p] 使用策划Agent创建新项目")
+        print("  [d] 删除项目")
+        print("  [e] 编辑项目")
         choice = input("请选择: ").strip()
+        
+        if choice == "d":
+            _delete_project(pm, projects)
+            return select_or_create_project(pm)
+        
+        if choice == "e":
+            _edit_project(pm, projects)
+            return select_or_create_project(pm)
+        
         if choice == "p":
             return _create_project_with_planner(pm)
         if choice != "0" and choice.isdigit() and 1 <= int(choice) <= len(projects):
@@ -184,6 +195,55 @@ def _manage_project_settings(pm: ProjectManager, project):
             _manage_characters(pm, project)
         elif choice == "3":
             _generate_reference_images(pm, project)
+
+
+def _delete_project(pm: ProjectManager, projects):
+    """删除项目"""
+    print("\n" + "=" * 60)
+    print("  删除项目")
+    print("=" * 60)
+    print("已有项目:")
+    for i, p in enumerate(projects, 1):
+        ep_count = len(p.episodes)
+        print(f"  [{i}] {p.name} - {ep_count}集")
+    print("  [q] 取消")
+
+    choice = input("选择要删除的项目: ").strip().lower()
+    if choice == "q":
+        return
+
+    if choice.isdigit() and 1 <= int(choice) <= len(projects):
+        project = projects[int(choice) - 1]
+        confirm = input(f"确认删除项目 '{project.name}'? 此操作不可恢复! [y/N]: ").strip().lower()
+        if confirm == "y":
+            success = pm.delete_project(project.project_id)
+            if success:
+                print(f"已删除: {project.name}")
+            else:
+                print("删除失败")
+        else:
+            print("已取消")
+
+
+def _edit_project(pm: ProjectManager, projects):
+    """编辑项目"""
+    print("\n" + "=" * 60)
+    print("  编辑项目")
+    print("=" * 60)
+    print("已有项目:")
+    for i, p in enumerate(projects, 1):
+        ep_count = len(p.episodes)
+        char_count = len(p.characters)
+        print(f"  [{i}] {p.name} ({p.genre}) - {ep_count}集 - {char_count}角色")
+    print("  [q] 取消")
+
+    choice = input("选择要编辑的项目: ").strip().lower()
+    if choice == "q":
+        return
+
+    if choice.isdigit() and 1 <= int(choice) <= len(projects):
+        project = projects[int(choice) - 1]
+        _manage_project_settings(pm, project)
 
 
 def _manage_characters(pm: ProjectManager, project):
