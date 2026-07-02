@@ -17,6 +17,7 @@ def build_graph():
     reviewer = ReviewerAgent()
 
     graph.add_node("screenwriting", screenwriter.execute)
+    graph.add_node("auto_script_review", auto_script_review_node)
     graph.add_node("human_script_review", human_script_review_node)
     graph.add_node("directing", director.execute)
     graph.add_node("human_plan_review", human_plan_review_node)
@@ -25,8 +26,29 @@ def build_graph():
     graph.add_node("skip_review", skip_review_node)
     graph.add_node("human_video_review", human_video_review_node)
 
+    # 编剧 → 自动审核循环
     graph.add_edge(START, "screenwriting")
-    graph.add_edge("screenwriting", "human_script_review")
+    graph.add_conditional_edges(
+        "screenwriting",
+        route_screenwriting_to_auto_review,
+        {
+            "auto_review": "auto_script_review",
+            "skip_to_human": "human_script_review",
+        }
+    )
+
+    # 自动审核 → 通过则人工确认，不通过则回到编剧
+    graph.add_conditional_edges(
+        "auto_script_review",
+        route_auto_script_review,
+        {
+            "approved": "human_script_review",
+            "revision": "screenwriting",
+            "max_rounds": "human_script_review",
+        }
+    )
+
+    # 人工确认脚本
     graph.add_conditional_edges(
         "human_script_review",
         route_after_script_review,
@@ -36,6 +58,8 @@ def build_graph():
             "cancelled": END,
         }
     )
+
+    # 导演 → 人工确认方案
     graph.add_edge("directing", "human_plan_review")
     graph.add_conditional_edges(
         "human_plan_review",
@@ -46,6 +70,8 @@ def build_graph():
             "cancelled": END,
         }
     )
+
+    # 剪辑 → 审核
     graph.add_conditional_edges(
         "editing",
         route_editing_to_review,
@@ -75,6 +101,49 @@ def build_graph():
     )
 
     return graph.compile()
+
+
+def route_screenwriting_to_auto_review(state: VideoState) -> str:
+    """编剧完成后，决定是否进行自动审核"""
+    if settings.llm_reviewer_enabled:
+        return "auto_review"
+    return "skip_to_human"
+
+
+def route_auto_script_review(state: VideoState) -> str:
+    """自动审核脚本后的路由"""
+    report = state.get("review_report")
+    if not report:
+        return "approved"
+
+    review_round = state.get("review_round", 0)
+
+    if report.verdict.value == "approved":
+        print(f"\n[自动审核] 通过 (评分: {report.overall_score}/100)")
+        return "approved"
+
+    if review_round >= report.max_rounds:
+        print(f"\n[自动审核] 达到最大轮次 ({review_round}轮)，提交人工确认")
+        return "max_rounds"
+
+    print(f"\n[自动审核] 不通过 (评分: {report.overall_score}/100)")
+    if report.revision_instructions:
+        print(f"  修改建议: {report.revision_instructions[:100]}...")
+    print(f"  第{review_round}轮，自动修改中...")
+    return "revision"
+
+
+def auto_script_review_node(state: VideoState) -> dict:
+    """自动审核脚本节点 - 包装reviewer并设置feedback"""
+    reviewer = ReviewerAgent()
+    result = reviewer.execute(state)
+
+    # 如果不通过，将修改建议设为human_feedback供编剧使用
+    report = result.get("review_report")
+    if report and report.verdict.value != "approved" and report.revision_instructions:
+        result["human_feedback"] = report.revision_instructions
+
+    return result
 
 
 def route_editing_to_review(state: VideoState) -> str:
@@ -131,20 +200,26 @@ def route_after_video_review(state: VideoState) -> str:
 
 def human_script_review_node(state: VideoState) -> dict:
     script = state["script"]
+    report = state.get("review_report")
+
     print("\n" + "=" * 60)
     print("  分镜脚本审核")
     print("=" * 60)
     print(f"标题: {script.title}")
     print(f"风格: {script.style} | 语气: {script.tone}")
     print(f"总时长: {script.total_duration}秒 | 镜头数: {len(script.shots)}")
+
+    if report:
+        print(f"自动审核评分: {report.overall_score}/100")
+
     print("-" * 60)
     for shot in script.shots:
         print(f"\n镜头 {shot.id} [{shot.type.value}] ({shot.duration}秒)")
-        print(f"  画面: {shot.image_prompt[:80]}...")
+        print(f"  画面: {shot.image_prompt}")
         print(f"  旁白: {shot.narration}")
         print(f"  字幕: {shot.subtitle}")
     print("\n" + "=" * 60)
-    print("操作: [a]确认  [r]修改后重新生成  [q]取消")
+    print("操作: [a]确认  [r]修改  [q]取消")
 
     while True:
         choice = input("请选择: ").strip().lower()
@@ -153,10 +228,10 @@ def human_script_review_node(state: VideoState) -> dict:
         print("无效输入，请重新选择")
 
     if choice == "a":
-        return {"human_action": "approve", "status": "directing"}
+        return {"human_action": "approve", "status": "directing", "review_round": 0}
     elif choice == "r":
         feedback = input("请输入修改意见: ").strip()
-        return {"human_action": "revise", "human_feedback": feedback, "status": "screenwriting"}
+        return {"human_action": "revise", "human_feedback": feedback, "status": "screenwriting", "review_round": 0}
     else:
         return {"human_action": "cancel", "status": "cancelled"}
 
@@ -165,7 +240,6 @@ def human_plan_review_node(state: VideoState) -> dict:
     script = state["script"]
     plan = state["production_plan"]
 
-    from config.settings import settings
     resolution = settings.kling_resolution
     model = settings.kling_model
     duration = settings.kling_duration

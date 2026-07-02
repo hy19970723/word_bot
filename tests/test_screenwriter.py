@@ -49,19 +49,29 @@ class TestShotCountCalculation:
 
 class TestModelTierSelection:
     def test_science_uses_reasoning(self):
-        assert _select_tier("science") == "reasoning"
+        with patch("src.agents.screenwriter.settings") as mock_settings:
+            mock_settings.llm_screenwriter_tier = "auto"
+            assert _select_tier("science") == "reasoning"
 
     def test_story_uses_reasoning(self):
-        assert _select_tier("story") == "reasoning"
+        with patch("src.agents.screenwriter.settings") as mock_settings:
+            mock_settings.llm_screenwriter_tier = "auto"
+            assert _select_tier("story") == "reasoning"
 
     def test_trending_uses_creative(self):
-        assert _select_tier("trending") == "creative"
+        with patch("src.agents.screenwriter.settings") as mock_settings:
+            mock_settings.llm_screenwriter_tier = "auto"
+            assert _select_tier("trending") == "creative"
 
     def test_product_uses_creative(self):
-        assert _select_tier("product") == "creative"
+        with patch("src.agents.screenwriter.settings") as mock_settings:
+            mock_settings.llm_screenwriter_tier = "auto"
+            assert _select_tier("product") == "creative"
 
     def test_unknown_fallback_to_creative(self):
-        assert _select_tier("unknown") == "creative"
+        with patch("src.agents.screenwriter.settings") as mock_settings:
+            mock_settings.llm_screenwriter_tier = "auto"
+            assert _select_tier("unknown") == "creative"
 
 
 class TestScreenwriterAgent:
