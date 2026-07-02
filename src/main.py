@@ -36,7 +36,10 @@ def select_or_create_project(pm: ProjectManager):
             char_count = len(p.characters)
             print(f"  [{i}] {p.name} ({p.genre}) - {ep_count}集 - {char_count}角色")
         print("  [0] 创建新项目")
+        print("  [p] 使用策划Agent创建新项目")
         choice = input("请选择: ").strip()
+        if choice == "p":
+            return _create_project_with_planner(pm)
         if choice != "0" and choice.isdigit() and 1 <= int(choice) <= len(projects):
             selected = projects[int(choice) - 1]
             print(f"\n已选择: {selected.name} (第{len(selected.episodes) + 1}集)")
@@ -48,6 +51,14 @@ def select_or_create_project(pm: ProjectManager):
             return selected
 
     print("\n创建新项目:")
+    print("  [1] 手动创建")
+    print("  [2] 使用策划Agent (推荐)")
+    mode = input("请选择 (默认2): ").strip() or "2"
+
+    if mode == "2":
+        return _create_project_with_planner(pm)
+
+    # 手动创建
     name = input("项目名称: ").strip()
     if not name:
         name = "未命名项目"
@@ -64,6 +75,54 @@ def select_or_create_project(pm: ProjectManager):
     setup = input("设置项目详情(世界观/角色/参考图等)? [y/N]: ").strip().lower()
     if setup == "y":
         _manage_project_settings(pm, project)
+
+    return project
+
+
+def _create_project_with_planner(pm: ProjectManager):
+    """使用策划Agent创建项目"""
+    from src.agents.planner import PlannerAgent
+
+    print("\n" + "=" * 60)
+    print("  策划Agent - 一句话生成完整项目")
+    print("=" * 60)
+    print("请输入项目描述，例如:")
+    print("  - 反套路武侠，宋朝背景，80集")
+    print("  - 都市赘婿逆袭，现代背景，50集")
+    print("  - 校园恋爱喜剧，高中背景，30集")
+    print()
+
+    user_input = input("项目描述: ").strip()
+    if not user_input:
+        print("描述不能为空")
+        return None
+
+    print("\n正在生成项目规划...")
+    planner = PlannerAgent()
+    plan = planner.plan(user_input)
+
+    if not plan:
+        print("策划Agent生成失败，请重试")
+        return None
+
+    # 展示规划
+    planner.display_plan(plan)
+
+    # 确认
+    confirm = input("\n确认使用此规划? [Y/n]: ").strip().lower()
+    if confirm == "n":
+        print("已取消")
+        return None
+
+    # 创建项目
+    project = planner.create_project_from_plan(plan, pm)
+    print(f"\n项目已创建: {project.name}")
+
+    # 生成角色参考图
+    if project.characters:
+        gen_ref = input("\n是否为角色生成参考图? (用于保持角色外貌一致性) [Y/n]: ").strip().lower()
+        if gen_ref != "n":
+            _generate_reference_images(pm, project)
 
     return project
 
