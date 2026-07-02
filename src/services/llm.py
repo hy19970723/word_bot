@@ -13,6 +13,11 @@ MODEL_ROUTING = {
         "temperature": None,
         "max_tokens": 4096,
     },
+    "chat": {
+        "model": "deepseek-chat",
+        "temperature": 0.8,
+        "max_tokens": 4096,
+    },
     "creative": {
         "model": "deepseek-chat",
         "temperature": 0.8,
