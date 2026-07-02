@@ -97,9 +97,32 @@ def _create_project_with_planner(pm: ProjectManager):
         print("描述不能为空")
         return None
 
-    print("\n正在生成项目规划...")
+    # 询问视觉风格
+    print("\n视觉风格:")
+    print("  [1] 动漫风 (Anime)")
+    print("  [2] 写实 (Realistic)")
+    print("  [3] 真人实拍 (Live Action)")
+    print("  [4] 电影感 (Cinematic)")
+    print("  [5] 3D渲染 (3D Render)")
+    print("  [6] 自定义")
+    style_choice = input("请选择 (默认1): ").strip() or "1"
+    
+    style_map = {
+        "1": "动漫风",
+        "2": "写实",
+        "3": "真人实拍",
+        "4": "电影感",
+        "5": "3D渲染",
+    }
+    
+    if style_choice == "6":
+        visual_style = input("请输入自定义风格: ").strip()
+    else:
+        visual_style = style_map.get(style_choice, "动漫风")
+
+    print(f"\n正在生成项目规划 (视觉风格: {visual_style})...")
     planner = PlannerAgent()
-    plan = planner.plan(user_input)
+    plan = planner.plan(user_input, visual_style)
 
     if not plan:
         print("策划Agent生成失败，请重试")

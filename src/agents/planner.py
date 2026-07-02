@@ -44,6 +44,8 @@ PLANNER_PROMPT = """你是一个专业的短视频内容策划专家。请根据
 
 用户输入：{user_input}
 
+用户指定的视觉风格：{visual_style}
+
 请生成以下内容：
 
 1. 项目基本信息
@@ -59,7 +61,7 @@ PLANNER_PROMPT = """你是一个专业的短视频内容策划专家。请根据
    - 时代背景、地点、规则等（100字以内）
 
 4. 视觉风格
-   - 画面风格建议（如"电影感"、"动漫风"、"写实"）
+   - 画面风格建议（必须使用用户指定的风格：{visual_style}）
    - 色调建议（如"暗色调"、"暖色调"）
 
 5. 音乐风格
@@ -78,6 +80,7 @@ PLANNER_PROMPT = """你是一个专业的短视频内容策划专家。请根据
 - 角色外貌描述要非常详细具体，包含年龄、性别、发型、服装、体型等
 - 故事要有吸引力，节奏紧凑
 - 适合短视频平台（抖音/TikTok）
+- 视觉风格必须使用用户指定的：{visual_style}
 
 请严格按照以下JSON格式输出：
 {json_schema}
@@ -91,14 +94,15 @@ class PlannerAgent:
         self.name = "planner"
         self.llm = LLMService(model_tier="reasoning")
 
-    def plan(self, user_input: str) -> Optional[ProjectPlan]:
+    def plan(self, user_input: str, visual_style: str = "") -> Optional[ProjectPlan]:
         """生成项目规划"""
-        logger.info("planner_start", user_input=user_input)
+        logger.info("planner_start", user_input=user_input, visual_style=visual_style)
 
         json_schema = ProjectPlan.model_json_schema()
 
         prompt = PLANNER_PROMPT.format(
             user_input=user_input,
+            visual_style=visual_style,
             json_schema=json_schema
         )
 
